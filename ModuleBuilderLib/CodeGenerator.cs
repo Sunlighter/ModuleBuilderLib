@@ -5,289 +5,318 @@ using System.Text;
 
 namespace Sunlighter.ModuleBuilderLib
 {
-    public class CodeGenerator2
+    public class CodeGenerator
     {
-        private readonly SymbolTable symbolTable;
+        private readonly ImmutableList<ILEmit> opcodes;
+        private readonly ImmutableList<LocalInfo> locals;
+        private readonly ImmutableStack<Symbol> labelStack;
 
-        private ImmutableList<ILEmit> opcodes;
-        private ImmutableList<LocalInfo2> locals;
-
-        private readonly string context;
-
-        private ImmutableStack<Symbol> labelStack;
-
-        public CodeGenerator2(SymbolTable symbolTable, string context)
+        private CodeGenerator
+        (
+            ImmutableList<ILEmit> opcodes,
+            ImmutableList<LocalInfo> locals,
+            ImmutableStack<Symbol> labelStack
+        )
         {
-            this.symbolTable = symbolTable;
+            this.opcodes = opcodes;
+            this.locals = locals;
+            this.labelStack = labelStack;
+        }
+
+        private CodeGenerator()
+        {
             this.opcodes = ImmutableList<ILEmit>.Empty;
-            this.locals = ImmutableList<LocalInfo2>.Empty;
-            this.context = context;
+            this.locals = ImmutableList<LocalInfo>.Empty;
             this.labelStack = ImmutableStack<Symbol>.Empty;
         }
 
-        public SymbolTable SymbolTable { get { return symbolTable; } }
+        private static CodeGenerator _empty = new CodeGenerator();
 
-        public string Context { get { return context; } }
+        public static CodeGenerator Empty { get { return _empty; } }
 
         public ImmutableList<ILEmit> ResultInstructions { get { return opcodes; } }
-        public ImmutableList<LocalInfo2> ResultLocals { get { return locals; } }
+        public ImmutableList<LocalInfo> ResultLocals { get { return locals; } }
 
-        public void Emit(ILEmit instruction)
+        public bool IsLabelStackEmpty { get { return labelStack.IsEmpty; } }
+
+        public ValueTuple<ImmutableList<LocalInfo>, ImmutableList<ILEmit>> Results
         {
-            opcodes = opcodes.Add(instruction);
+            get
+            {
+                if (!IsLabelStackEmpty) throw new InvalidOperationException("Label stack is not empty");
+                return (locals, opcodes);
+            }
+        }
+
+        private CodeGenerator WithOpcodes(ImmutableList<ILEmit> opcodes2)
+        {
+            return new CodeGenerator(opcodes2, locals, labelStack);
+        }
+
+        public CodeGenerator Emit(ILEmit instruction)
+        {
+            return WithOpcodes(opcodes.Add(instruction));
         }
 
         #region Arithmetic / Logic
 
-        public void Add() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Add)); }
-        public void AddOvf() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.AddOvf)); }
-        public void AddOvfUn() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.AddOvfUn)); }
+        public CodeGenerator Add() { return Emit(new ILEmitNoArg(ILNoArg.Add)); }
+        public CodeGenerator AddOvf() { return Emit(new ILEmitNoArg(ILNoArg.AddOvf)); }
+        public CodeGenerator AddOvfUn() { return Emit(new ILEmitNoArg(ILNoArg.AddOvfUn)); }
 
-        public void Sub() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Sub)); }
-        public void SubOvf() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.SubOvf)); }
-        public void SubOvfUn() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.SubOvfUn)); }
+        public CodeGenerator Sub() { return Emit(new ILEmitNoArg(ILNoArg.Sub)); }
+        public CodeGenerator SubOvf() { return Emit(new ILEmitNoArg(ILNoArg.SubOvf)); }
+        public CodeGenerator SubOvfUn() { return Emit(new ILEmitNoArg(ILNoArg.SubOvfUn)); }
 
-        public void Mul() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Mul)); }
-        public void MulOvf() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.MulOvf)); }
-        public void MulOvfUn() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.MulOvfUn)); }
+        public CodeGenerator Mul() { return Emit(new ILEmitNoArg(ILNoArg.Mul)); }
+        public CodeGenerator MulOvf() { return Emit(new ILEmitNoArg(ILNoArg.MulOvf)); }
+        public CodeGenerator MulOvfUn() { return Emit(new ILEmitNoArg(ILNoArg.MulOvfUn)); }
 
-        public void Div() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Div)); }
-        public void DivUn() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.DivUn)); }
+        public CodeGenerator Div() { return Emit(new ILEmitNoArg(ILNoArg.Div)); }
+        public CodeGenerator DivUn() { return Emit(new ILEmitNoArg(ILNoArg.DivUn)); }
 
-        public void Rem() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Rem)); }
-        public void RemUn() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.RemUn)); }
+        public CodeGenerator Rem() { return Emit(new ILEmitNoArg(ILNoArg.Rem)); }
+        public CodeGenerator RemUn() { return Emit(new ILEmitNoArg(ILNoArg.RemUn)); }
 
-        public void And() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.And)); }
-        public void Or() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Or)); }
-        public void Xor() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Xor)); }
-        public void Invert() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Not)); }
-        public void Negate() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Negate)); }
+        public CodeGenerator And() { return Emit(new ILEmitNoArg(ILNoArg.And)); }
+        public CodeGenerator Or() { return Emit(new ILEmitNoArg(ILNoArg.Or)); }
+        public CodeGenerator Xor() { return Emit(new ILEmitNoArg(ILNoArg.Xor)); }
+        public CodeGenerator Invert() { return Emit(new ILEmitNoArg(ILNoArg.Not)); }
+        public CodeGenerator Negate() { return Emit(new ILEmitNoArg(ILNoArg.Negate)); }
 
-        public void Shl() /* ( value shiftamount -- value ) */ { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Shl)); }
-        public void Shr() /* ( value shiftamount -- value ) */ { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Shr)); }
-        public void ShrUn() /* ( value shiftamount -- value ) */ { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.ShrUn)); }
+        public CodeGenerator Shl() /* ( value shiftamount -- value ) */ { return Emit(new ILEmitNoArg(ILNoArg.Shl)); }
+        public CodeGenerator Shr() /* ( value shiftamount -- value ) */ { return Emit(new ILEmitNoArg(ILNoArg.Shr)); }
+        public CodeGenerator ShrUn() /* ( value shiftamount -- value ) */ { return Emit(new ILEmitNoArg(ILNoArg.ShrUn)); }
 
         #endregion
 
-        public void Dup() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Dup)); }
-        public void Drop() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Pop)); }
+        public CodeGenerator Dup() { return Emit(new ILEmitNoArg(ILNoArg.Dup)); }
+        public CodeGenerator Drop() { return Emit(new ILEmitNoArg(ILNoArg.Pop)); }
 
-        public void LoadLocal(Symbol s)
+        public CodeGenerator LoadLocal(Symbol s)
         {
-            opcodes = opcodes.Add(new ILEmitLoadLocal(s));
+            return Emit(new ILEmitLoadLocal(s));
         }
 
-        public void StoreLocal(Symbol s)
+        public CodeGenerator StoreLocal(Symbol s)
         {
-            opcodes = opcodes.Add(new ILEmitStoreLocal(s));
+            return Emit(new ILEmitStoreLocal(s));
         }
 
-        public void LoadArg(Symbol s)
+        public CodeGenerator LoadArg(Symbol s)
         {
-            opcodes = opcodes.Add(new ILEmitLoadArg(s));
+            return Emit(new ILEmitLoadArg(s));
         }
 
-        public void StoreArg(Symbol s)
+        public CodeGenerator StoreArg(Symbol s)
         {
-            opcodes = opcodes.Add(new ILEmitStoreArg(s));
+            return Emit(new ILEmitStoreArg(s));
         }
 
-        public void LoadInt(int literal)
+        public CodeGenerator LoadInt(int literal)
         {
-            opcodes = opcodes.Add(new ILEmitLoadInt(literal));
+            return Emit(new ILEmitLoadInt(literal));
         }
 
-        public void LoadLong(long literal)
+        public CodeGenerator LoadLong(long literal)
         {
-            opcodes = opcodes.Add(new ILEmitLoadLong(literal));
+            return Emit(new ILEmitLoadLong(literal));
         }
 
-        public void LoadFloat(float literal)
+        public CodeGenerator LoadFloat(float literal)
         {
-            opcodes = opcodes.Add(new ILEmitLoadFloat(literal));
+            return Emit(new ILEmitLoadFloat(literal));
         }
 
-        public void LoadDouble(double literal)
+        public CodeGenerator LoadDouble(double literal)
         {
-            opcodes = opcodes.Add(new ILEmitLoadDouble(literal));
+            return Emit(new ILEmitLoadDouble(literal));
         }
 
-        public void LoadString(string literal)
+        public CodeGenerator LoadString(string literal)
         {
-            opcodes = opcodes.Add(new ILEmitLoadString(literal));
+            return Emit(new ILEmitLoadString(literal));
         }
 
-        public void LoadNullPtr()
+        public CodeGenerator LoadNullPtr()
         {
-            opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.LoadNullPtr));
+            return Emit(new ILEmitNoArg(ILNoArg.LoadNullPtr));
         }
 
-        public void LoadField(FieldReference fi)
+        public CodeGenerator LoadField(FieldReference fi)
         {
-            opcodes = opcodes.Add(new ILEmitFieldOp(ILFieldOp.Load, fi));
+            return Emit(new ILEmitFieldOp(ILFieldOp.Load, fi));
         }
 
-        public void LoadFieldAddress(FieldReference fi)
+        public CodeGenerator LoadFieldAddress(FieldReference fi)
         {
-            opcodes = opcodes.Add(new ILEmitFieldOp(ILFieldOp.LoadAddress, fi));
+            return Emit(new ILEmitFieldOp(ILFieldOp.LoadAddress, fi));
         }
 
-        public void StoreField(FieldReference fi)
+        public CodeGenerator StoreField(FieldReference fi)
         {
-            opcodes = opcodes.Add(new ILEmitFieldOp(ILFieldOp.Store, fi));
+            return Emit(new ILEmitFieldOp(ILFieldOp.Store, fi));
         }
 
-        public void LoadStaticField(FieldReference fi)
+        public CodeGenerator LoadStaticField(FieldReference fi)
         {
-            opcodes = opcodes.Add(new ILEmitFieldOp(ILFieldOp.LoadStatic, fi));
+            return Emit(new ILEmitFieldOp(ILFieldOp.LoadStatic, fi));
         }
 
-        public void LoadStaticFieldAddress(FieldReference fi)
+        public CodeGenerator LoadStaticFieldAddress(FieldReference fi)
         {
-            opcodes = opcodes.Add(new ILEmitFieldOp(ILFieldOp.LoadStaticAddress, fi));
+            return Emit(new ILEmitFieldOp(ILFieldOp.LoadStaticAddress, fi));
         }
 
-        public void StoreStaticField(FieldReference fi)
+        public CodeGenerator StoreStaticField(FieldReference fi)
         {
-            opcodes = opcodes.Add(new ILEmitFieldOp(ILFieldOp.Store, fi));
+            return Emit(new ILEmitFieldOp(ILFieldOp.Store, fi));
         }
 
-        public void LoadToken(TypeReference t)
+        public CodeGenerator LoadToken(TypeReference t)
         {
-            opcodes = opcodes.Add(new ILEmitLoadTypeToken(t));
+            return Emit(new ILEmitLoadTypeToken(t));
         }
 
-        public void LoadToken(MethodReference mi)
+        public CodeGenerator LoadToken(MethodReference mi)
         {
-            opcodes = opcodes.Add(new ILEmitLoadMethodToken(mi));
+            return Emit(new ILEmitLoadMethodToken(mi));
         }
 
-        public void LoadToken(ConstructorReference ci)
+        public CodeGenerator LoadToken(ConstructorReference ci)
         {
-            opcodes = opcodes.Add(new ILEmitLoadConstructorToken(ci));
+            return Emit(new ILEmitLoadConstructorToken(ci));
         }
 
-        public void LoadToken(FieldReference fi)
+        public CodeGenerator LoadToken(FieldReference fi)
         {
-            opcodes = opcodes.Add(new ILEmitLoadFieldToken(fi));
+            return Emit(new ILEmitLoadFieldToken(fi));
         }
 
-        public void NewObj(ConstructorReference ci)
+        public CodeGenerator NewObj(ConstructorReference ci)
         {
-            opcodes = opcodes.Add(new ILEmitNewObj(ci));
+            return Emit(new ILEmitNewObj(ci));
         }
 
-        public void Throw()
+        public CodeGenerator Throw()
         {
-            opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Throw));
+            return Emit(new ILEmitNoArg(ILNoArg.Throw));
         }
 
-        public void Tail()
+        public CodeGenerator Tail()
         {
-            opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Tail));
+            return Emit(new ILEmitNoArg(ILNoArg.Tail));
         }
 
-        public void Call(MethodReference mi)
+        public CodeGenerator Call(MethodReference mi)
         {
-            opcodes = opcodes.Add(new ILEmitCall(mi));
+            return Emit(new ILEmitCall(mi));
         }
 
-        public void CallVirt(MethodReference mi)
+        public CodeGenerator CallVirt(MethodReference mi)
         {
-            opcodes = opcodes.Add(new ILEmitCallVirt(mi));
+            return Emit(new ILEmitCallVirt(mi));
         }
 
-        public void Return()
+        public CodeGenerator Return()
         {
-            opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Return));
+            return Emit(new ILEmitNoArg(ILNoArg.Return));
         }
 
-        public void IsInst(TypeReference t)
+        public CodeGenerator IsInst(TypeReference t)
         {
-            opcodes = opcodes.Add(new ILEmitTypeOp(ILTypeOp.IsInst, t));
+            return Emit(new ILEmitTypeOp(ILTypeOp.IsInst, t));
         }
 
-        public void CastClass(TypeReference t)
+        public CodeGenerator CastClass(TypeReference t)
         {
-            opcodes = opcodes.Add(new ILEmitTypeOp(ILTypeOp.CastClass, t));
+            return Emit(new ILEmitTypeOp(ILTypeOp.CastClass, t));
         }
 
-        private void SwapLabels()
+        private CodeGenerator SwapLabels()
         {
-            labelStack = labelStack.Swap();
+            return new CodeGenerator(opcodes, locals, labelStack.Swap());
         }
 
-        public void Ahead(bool useLongForm)
-        {
-            Symbol l = new Symbol();
-            opcodes = opcodes.Add(new ILEmitBranch(useLongForm ? ILBranch.Br : ILBranch.Br_S, l));
-            labelStack = labelStack.Push(l);
-        }
-
-        public void Then()
-        {
-            Symbol l = labelStack.Peek();
-            labelStack = labelStack.Pop();
-            opcodes = opcodes.Add(new ILEmitLabel(l));
-        }
-
-        public void IfNot(ILBranch branch)
+        public CodeGenerator Ahead(bool useLongForm)
         {
             Symbol l = new Symbol();
-            opcodes = opcodes.Add(new ILEmitBranch(branch, l));
-            labelStack = labelStack.Push(l);
+            ImmutableList<ILEmit> opcodes2 = opcodes.Add(new ILEmitBranch(useLongForm ? ILBranch.Br : ILBranch.Br_S, l));
+            ImmutableStack<Symbol> labelStack2 = labelStack.Push(l);
+            return new CodeGenerator(opcodes2, locals, labelStack2);
         }
 
-        public void Else(bool useLongForm)
+        public CodeGenerator Then()
         {
-            Ahead(useLongForm);
-            SwapLabels();
-            Then();
+            Symbol l = labelStack.Peek();
+            ImmutableStack<Symbol> labelStack2 = labelStack.Pop();
+            ImmutableList<ILEmit> opcodes2 = opcodes.Add(new ILEmitLabel(l));
+            return new CodeGenerator(opcodes2, locals, labelStack2);
         }
 
-        public void Begin()
+        public CodeGenerator IfNot(ILBranch branch)
         {
             Symbol l = new Symbol();
-            opcodes = opcodes.Add(new ILEmitLabel(l));
-            labelStack = labelStack.Push(l);
+            ImmutableList<ILEmit> opcodes2 = opcodes.Add(new ILEmitBranch(branch, l));
+            ImmutableStack<Symbol> labelStack2 = labelStack.Push(l);
+            return new CodeGenerator(opcodes2, locals, labelStack2);
         }
 
-        public void Again(bool useLongForm)
+        public CodeGenerator Else(bool useLongForm)
+        {
+            CodeGenerator cg2 = Ahead(useLongForm);
+            cg2 = cg2.SwapLabels();
+            cg2 = cg2.Then();
+            return cg2;
+        }
+
+        public CodeGenerator Begin()
+        {
+            Symbol l = new Symbol();
+            ImmutableList<ILEmit> opcodes2 = opcodes.Add(new ILEmitLabel(l));
+            ImmutableStack<Symbol> labelStack2 = labelStack.Push(l);
+            return new CodeGenerator(opcodes2, locals, labelStack2);
+        }
+
+        public CodeGenerator Again(bool useLongForm)
         {
             Symbol l = labelStack.Peek();
-            labelStack = labelStack.Pop();
-            opcodes.Add(new ILEmitBranch(useLongForm ? ILBranch.Br : ILBranch.Br_S, l));
+            ImmutableStack<Symbol> labelStack2 = labelStack.Pop();
+            ImmutableList<ILEmit> opcodes2 = opcodes.Add(new ILEmitBranch(useLongForm ? ILBranch.Br : ILBranch.Br_S, l));
+            return new CodeGenerator(opcodes2, locals, labelStack2);
         }
 
-        public void UntilNot(ILBranch branch)
+        public CodeGenerator UntilNot(ILBranch branch)
         {
             Symbol l = labelStack.Peek();
-            labelStack = labelStack.Pop();
-            opcodes.Add(new ILEmitBranch(branch, l));
+            ImmutableStack<Symbol> labelStack2 = labelStack.Pop();
+            ImmutableList<ILEmit> opcodes2 = opcodes.Add(new ILEmitBranch(branch, l));
+            return new CodeGenerator(opcodes2, locals, labelStack2);
         }
 
-        public void WhileNot(ILBranch branch)
+        public CodeGenerator WhileNot(ILBranch branch)
         {
-            IfNot(branch);
+            return IfNot(branch);
         }
 
-        public void Repeat(bool useLongForm)
+        public CodeGenerator Repeat(bool useLongForm)
         {
-            SwapLabels();
-            Again(useLongForm);
-            Then();
+            CodeGenerator cg2 = SwapLabels();
+            cg2 = cg2.Again(useLongForm);
+            cg2 = cg2.Then();
+            return cg2;
         }
 
-        public Symbol DeclareLocal(TypeReference t)
+        public ValueTuple<CodeGenerator, Symbol> DeclareLocal(TypeReference t)
         {
             Symbol s = new Symbol();
-            locals = locals.Add(new LocalInfo2(s, t, false));
-            return s;
+            CodeGenerator cg2 = new CodeGenerator(opcodes, locals.Add(new LocalInfo(s, t, false)), labelStack);
+            return (cg2, s);
         }
 
         public TypeReference GetLocalType(Symbol local)
         {
-            Option<LocalInfo2> localInfo = locals.FindOption(x => x.Name == local);
+            Option<LocalInfo> localInfo = locals.FindOption(x => x.Name == local);
             if (localInfo.HasValue)
             {
                 return localInfo.Value.LocalType;
@@ -298,69 +327,69 @@ namespace Sunlighter.ModuleBuilderLib
             }
         }
 
-        public void Ceq() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Ceq)); }
-        public void Clt() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Clt)); }
-        public void CltUn() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.CltUn)); }
-        public void Cgt() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.Cgt)); }
-        public void CgtUn() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.CgtUn)); }
+        public CodeGenerator Ceq() { return Emit(new ILEmitNoArg(ILNoArg.Ceq)); }
+        public CodeGenerator Clt() { return Emit(new ILEmitNoArg(ILNoArg.Clt)); }
+        public CodeGenerator CltUn() { return Emit(new ILEmitNoArg(ILNoArg.CltUn)); }
+        public CodeGenerator Cgt() { return Emit(new ILEmitNoArg(ILNoArg.Cgt)); }
+        public CodeGenerator CgtUn() { return Emit(new ILEmitNoArg(ILNoArg.CgtUn)); }
 
-        public void SizeOf(TypeReference t)
+        public CodeGenerator SizeOf(TypeReference t)
         {
-            opcodes = opcodes.Add(new ILEmitTypeOp(ILTypeOp.SizeOf, t));
+            return Emit(new ILEmitTypeOp(ILTypeOp.SizeOf, t));
         }
 
-        public void LoadObjRef() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.LoadObjRef)); }
+        public CodeGenerator LoadObjRef() { return Emit(new ILEmitNoArg(ILNoArg.LoadObjRef)); }
 
-        public void LoadObjIndirect(TypeReference t)
+        public CodeGenerator LoadObjIndirect(TypeReference t)
         {
-            opcodes = opcodes.Add(new ILEmitTypeOp(ILTypeOp.LoadObjIndirect, t));
+            return Emit(new ILEmitTypeOp(ILTypeOp.LoadObjIndirect, t));
         }
 
-        public void StoreObjRef() { opcodes = opcodes.Add(new ILEmitNoArg(ILNoArg.StoreObjRef)); }
+        public CodeGenerator StoreObjRef() { return Emit(new ILEmitNoArg(ILNoArg.StoreObjRef)); }
 
-        public void StoreObjIndirect(TypeReference t)
+        public CodeGenerator StoreObjIndirect(TypeReference t)
         {
-            opcodes = opcodes.Add(new ILEmitTypeOp(ILTypeOp.StoreObjIndirect, t));
+            return Emit(new ILEmitTypeOp(ILTypeOp.StoreObjIndirect, t));
         }
 
-        public void Box(TypeReference t)
+        public CodeGenerator Box(TypeReference t)
         {
-            opcodes = opcodes.Add(new ILEmitTypeOp(ILTypeOp.Box, t));
+            return Emit(new ILEmitTypeOp(ILTypeOp.Box, t));
         }
 
-        public void Unbox(TypeReference t)
+        public CodeGenerator Unbox(TypeReference t)
         {
-            opcodes = opcodes.Add(new ILEmitTypeOp(ILTypeOp.Unbox, t));
+            return Emit(new ILEmitTypeOp(ILTypeOp.Unbox, t));
         }
 
-        public void UnboxAny(TypeReference t)
+        public CodeGenerator UnboxAny(TypeReference t)
         {
-            opcodes = opcodes.Add(new ILEmitTypeOp(ILTypeOp.UnboxAny, t));
+            return Emit(new ILEmitTypeOp(ILTypeOp.UnboxAny, t));
         }
 
-        public void Try(Symbol endOfBlockLabel)
+        public CodeGenerator Try(Symbol endOfBlockLabel)
         {
-            opcodes = opcodes.Add(new ILEmitBeginExceptionBlock(endOfBlockLabel));
+            return Emit(new ILEmitBeginExceptionBlock(endOfBlockLabel));
         }
 
-        public void Catch(TypeReference exceptionType)
+        public CodeGenerator Catch(TypeReference exceptionType)
         {
-            opcodes = opcodes.Add(new ILEmitBeginCatchBlock(exceptionType));
+            return Emit(new ILEmitBeginCatchBlock(exceptionType));
         }
 
-        public void Finally()
+        public CodeGenerator Finally()
         {
-            opcodes = opcodes.Add(new ILEmitBeginFinallyBlock());
+            return Emit(new ILEmitBeginFinallyBlock());
         }
 
-        public void EndTryCatchFinally()
+        public CodeGenerator EndTryCatchFinally()
         {
-            opcodes = opcodes.Add(new ILEmitEndExceptionBlock());
+            return Emit(new ILEmitEndExceptionBlock());
         }
 
-        public void Leave(bool useLongForm, Symbol endOfBlockLabel)
+        public CodeGenerator Leave(bool useLongForm, Symbol endOfBlockLabel)
         {
-            opcodes = opcodes.Add(new ILEmitBranch(useLongForm ? ILBranch.Leave : ILBranch.Leave_S, endOfBlockLabel));
+            return Emit(new ILEmitBranch(useLongForm ? ILBranch.Leave : ILBranch.Leave_S, endOfBlockLabel));
         }
     }
 

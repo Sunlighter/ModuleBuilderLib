@@ -16,12 +16,12 @@ namespace Sunlighter.ModuleBuilderLib
         void Compile(System.Reflection.Emit.ModuleBuilder mb, ImmutableDictionary<ItemKey, SaBox<object>> vars);
     }
 
-    public class ParamInfo2
+    public class ParamInfo
     {
         private readonly Symbol name;
         private readonly TypeReference paramType;
 
-        public ParamInfo2(Symbol name, TypeReference paramType)
+        public ParamInfo(Symbol name, TypeReference paramType)
         {
             this.name = name;
             this.paramType = paramType;

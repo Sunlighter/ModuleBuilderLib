@@ -41,20 +41,18 @@ namespace ModuleBuilderTest
                             (
                                 MethodAttributes.Public,
                                 "this",
-                                ImmutableList<ParamInfo2>.Empty
-                                .Add(new ParamInfo2("iScale", ExistingTypeReference.Int32))
-                                .Add(new ParamInfo2("jScale", ExistingTypeReference.Int32)),
-                                "MyClass constructor",
-                                cg2 =>
-                                {
-                                    cg2.LoadArg("this");
-                                    cg2.LoadArg("iScale");
-                                    cg2.StoreField(new FieldKeyReference(new FieldKey(new TypeKey("MyClass"), "iScale", ExistingTypeReference.Int32)));
-                                    cg2.LoadArg("this");
-                                    cg2.LoadArg("jScale");
-                                    cg2.StoreField(new FieldKeyReference(new FieldKey(new TypeKey("MyClass"), "jScale", ExistingTypeReference.Int32)));
-                                    cg2.Return();
-                                }
+                                ImmutableList<ParamInfo>.Empty
+                                    .Add(new ParamInfo("iScale", ExistingTypeReference.Int32))
+                                    .Add(new ParamInfo("jScale", ExistingTypeReference.Int32)),
+                                CodeGenerator.Empty
+                                    .LoadArg("this")
+                                    .LoadArg("iScale")
+                                    .StoreField(new FieldKeyReference(new FieldKey(new TypeKey("MyClass"), "iScale", ExistingTypeReference.Int32)))
+                                    .LoadArg("this")
+                                    .LoadArg("jScale")
+                                    .StoreField(new FieldKeyReference(new FieldKey(new TypeKey("MyClass"), "jScale", ExistingTypeReference.Int32)))
+                                    .Return()
+                                    .Results
                             )
                         )
                         .Add
@@ -65,23 +63,21 @@ namespace ModuleBuilderTest
                                 MethodAttributes.Public | MethodAttributes.Virtual,
                                 ExistingTypeReference.Int32,
                                 new Some<Symbol>("this"),
-                                ImmutableList<ParamInfo2>.Empty
-                                .Add(new ParamInfo2("i", ExistingTypeReference.Int32))
-                                .Add(new ParamInfo2("j", ExistingTypeReference.Int32)),
-                                "MyClass.Operate",
-                                cg2 =>
-                                {
-                                    cg2.LoadArg("i");
-                                    cg2.LoadArg("this");
-                                    cg2.LoadField(new FieldKeyReference(new FieldKey(new TypeKey("MyClass"), "iScale", ExistingTypeReference.Int32)));
-                                    cg2.Mul();
-                                    cg2.LoadArg("j");
-                                    cg2.LoadArg("this");
-                                    cg2.LoadField(new FieldKeyReference(new FieldKey(new TypeKey("MyClass"), "jScale", ExistingTypeReference.Int32)));
-                                    cg2.Mul();
-                                    cg2.Add();
-                                    cg2.Return();
-                                }
+                                ImmutableList<ParamInfo>.Empty
+                                    .Add(new ParamInfo("i", ExistingTypeReference.Int32))
+                                    .Add(new ParamInfo("j", ExistingTypeReference.Int32)),
+                                CodeGenerator.Empty
+                                    .LoadArg("i")
+                                    .LoadArg("this")
+                                    .LoadField(new FieldKeyReference(new FieldKey(new TypeKey("MyClass"), "iScale", ExistingTypeReference.Int32)))
+                                    .Mul()
+                                    .LoadArg("j")
+                                    .LoadArg("this")
+                                    .LoadField(new FieldKeyReference(new FieldKey(new TypeKey("MyClass"), "jScale", ExistingTypeReference.Int32)))
+                                    .Mul()
+                                    .Add()
+                                    .Return()
+                                    .Results
                             )
                         )
                     )

@@ -1019,13 +1019,13 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class LocalInfo2
+    public class LocalInfo
     {
         private readonly Symbol name;
         private readonly TypeReference localType;
         private readonly bool isPinned;
 
-        public LocalInfo2(Symbol name, TypeReference paramType, bool isPinned)
+        public LocalInfo(Symbol name, TypeReference paramType, bool isPinned)
         {
             this.name = name;
             this.localType = paramType;
@@ -1041,7 +1041,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public static partial class Utils
     {
-        public static void ILCompile(SymbolTable symbolTable, ImmutableList<ILEmit> instructions, ImmutableList<LocalInfo2> localInfos, Option<Symbol> thisParameterName, ImmutableList<ParamInfo2> paramInfos, ILGenerator ilg, ImmutableDictionary<ItemKey, SaBox<object>> vars)
+        public static void ILCompile(SymbolTable symbolTable, ImmutableList<ILEmit> instructions, ImmutableList<LocalInfo> localInfos, Option<Symbol> thisParameterName, ImmutableList<ParamInfo> paramInfos, ILGenerator ilg, ImmutableDictionary<ItemKey, SaBox<object>> vars)
         {
             ImmutableHashSet<Symbol> labelsDefined = instructions.Select(x => x.LabelsDefined).UnionAll();
             ImmutableHashSet<Symbol> labelsUsed = instructions.Select(x => x.LabelsUsed).UnionAll();
@@ -1061,7 +1061,7 @@ namespace Sunlighter.ModuleBuilderLib
 
             ImmutableDictionary<Symbol, LocalBuilder> locals = ImmutableDictionary<Symbol, LocalBuilder>.Empty;
 
-            foreach (LocalInfo2 localInfo in localInfos)
+            foreach (LocalInfo localInfo in localInfos)
             {
                 locals = locals.Add(localInfo.Name, ilg.DeclareLocal(localInfo.LocalType.Resolve(vars), localInfo.IsPinned));
             }
@@ -1091,24 +1091,23 @@ namespace Sunlighter.ModuleBuilderLib
     {
         private readonly MethodAttributes attributes;
         private readonly Symbol thisParameterName;
-        private readonly ImmutableList<ParamInfo2> parameters;
-        private readonly string context;
-        private readonly Action<CodeGenerator2> action;
+        private readonly ImmutableList<ParamInfo> parameters;
+        private readonly ImmutableList<LocalInfo> locals;
+        private readonly ImmutableList<ILEmit> opcodes;
 
         public ILConstructorToBuild
         (
             MethodAttributes attributes,
             Symbol thisParameterName,
-            ImmutableList<ParamInfo2> parameters,
-            string context,
-            Action<CodeGenerator2> action
+            ImmutableList<ParamInfo> parameters,
+            ValueTuple<ImmutableList<LocalInfo>, ImmutableList<ILEmit>> localsAndOpcodes
         )
         {
             this.attributes = attributes;
             this.thisParameterName = thisParameterName;
             this.parameters = parameters;
-            this.context = context;
-            this.action = action;
+            this.locals = localsAndOpcodes.Item1;
+            this.opcodes = localsAndOpcodes.Item2;
         }
 
         private ConstructorKey GetConstructorKey(TypeKey owner)
@@ -1122,9 +1121,9 @@ namespace Sunlighter.ModuleBuilderLib
             private readonly SymbolTable symbolTable;
             private readonly TypeKey owner;
             private readonly ConstructorKey constructorKey;
-            private readonly ImmutableList<LocalInfo2> locals;
+            private readonly ImmutableList<LocalInfo> locals;
 
-            public MakeILConstructor(ILConstructorToBuild parent, SymbolTable symbolTable, TypeKey owner, ConstructorKey constructorKey, ImmutableList<LocalInfo2> locals)
+            public MakeILConstructor(ILConstructorToBuild parent, SymbolTable symbolTable, TypeKey owner, ConstructorKey constructorKey, ImmutableList<LocalInfo> locals)
             {
                 this.parent = parent;
                 this.symbolTable = symbolTable;
@@ -1170,10 +1169,10 @@ namespace Sunlighter.ModuleBuilderLib
             private readonly SymbolTable symbolTable;
             private readonly TypeKey owner;
             private readonly ConstructorKey constructorKey;
-            private readonly ImmutableList<LocalInfo2> locals;
+            private readonly ImmutableList<LocalInfo> locals;
             private readonly ImmutableList<ILEmit> instructions;
 
-            public MakeILConstructorBody(ILConstructorToBuild parent, SymbolTable symbolTable, TypeKey owner, ConstructorKey constructorKey, ImmutableList<LocalInfo2> locals, ImmutableList<ILEmit> instructions)
+            public MakeILConstructorBody(ILConstructorToBuild parent, SymbolTable symbolTable, TypeKey owner, ConstructorKey constructorKey, ImmutableList<LocalInfo> locals, ImmutableList<ILEmit> instructions)
             {
                 this.parent = parent;
                 this.symbolTable = symbolTable;
@@ -1225,14 +1224,10 @@ namespace Sunlighter.ModuleBuilderLib
         public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner)
         {
             ConstructorKey ck = GetConstructorKey(owner);
-            CodeGenerator2 cg = new CodeGenerator2(s, context);
-            action(cg);
-            ImmutableList<LocalInfo2> locals = cg.ResultLocals;
-            ImmutableList<ILEmit> instructions = cg.ResultInstructions;
 
             return ImmutableList<ICompileStep>.Empty
                 .Add(new MakeILConstructor(this, s, owner, ck, locals))
-                .Add(new MakeILConstructorBody(this, s, owner, ck, locals, instructions));
+                .Add(new MakeILConstructorBody(this, s, owner, ck, locals, opcodes));
         }
     }
 
@@ -1242,9 +1237,9 @@ namespace Sunlighter.ModuleBuilderLib
         private readonly MethodAttributes attributes;
         private readonly TypeReference returnType;
         private readonly Option<Symbol> thisParameterName;
-        private readonly ImmutableList<ParamInfo2> parameters;
-        private readonly string context;
-        private readonly Action<CodeGenerator2> action;
+        private readonly ImmutableList<ParamInfo> parameters;
+        private readonly ImmutableList<LocalInfo> locals;
+        private readonly ImmutableList<ILEmit> opcodes;
 
         public ILMethodToBuild
         (
@@ -1252,9 +1247,8 @@ namespace Sunlighter.ModuleBuilderLib
             MethodAttributes attributes,
             TypeReference returnType,
             Option<Symbol> thisParameterName,
-            ImmutableList<ParamInfo2> parameters,
-            string context,
-            Action<CodeGenerator2> action
+            ImmutableList<ParamInfo> parameters,
+            ValueTuple<ImmutableList<LocalInfo>, ImmutableList<ILEmit>> localsAndOpcodes
         )
         {
             this.name = name;
@@ -1262,8 +1256,8 @@ namespace Sunlighter.ModuleBuilderLib
             this.returnType = returnType;
             this.thisParameterName = thisParameterName;
             this.parameters = parameters;
-            this.context = context;
-            this.action = action;
+            this.locals = localsAndOpcodes.Item1;
+            this.opcodes = localsAndOpcodes.Item2;
 
             if (attributes.HasFlag(MethodAttributes.Static) && thisParameterName.HasValue)
             {
@@ -1286,9 +1280,9 @@ namespace Sunlighter.ModuleBuilderLib
             private readonly SymbolTable symbolTable;
             private readonly TypeKey owner;
             private readonly MethodKey methodKey;
-            private readonly ImmutableList<LocalInfo2> locals;
+            private readonly ImmutableList<LocalInfo> locals;
 
-            public MakeILMethod(ILMethodToBuild parent, SymbolTable symbolTable, TypeKey owner, MethodKey methodKey, ImmutableList<LocalInfo2> locals)
+            public MakeILMethod(ILMethodToBuild parent, SymbolTable symbolTable, TypeKey owner, MethodKey methodKey, ImmutableList<LocalInfo> locals)
             {
                 this.parent = parent;
                 this.symbolTable = symbolTable;
@@ -1341,10 +1335,10 @@ namespace Sunlighter.ModuleBuilderLib
             private readonly SymbolTable symbolTable;
             private readonly TypeKey owner;
             private readonly MethodKey methodKey;
-            private readonly ImmutableList<LocalInfo2> locals;
+            private readonly ImmutableList<LocalInfo> locals;
             private readonly ImmutableList<ILEmit> instructions;
 
-            public MakeILMethodBody(ILMethodToBuild parent, SymbolTable symbolTable, TypeKey owner, MethodKey methodKey, ImmutableList<LocalInfo2> locals, ImmutableList<ILEmit> instructions)
+            public MakeILMethodBody(ILMethodToBuild parent, SymbolTable symbolTable, TypeKey owner, MethodKey methodKey, ImmutableList<LocalInfo> locals, ImmutableList<ILEmit> instructions)
             {
                 this.parent = parent;
                 this.symbolTable = symbolTable;
@@ -1403,14 +1397,10 @@ namespace Sunlighter.ModuleBuilderLib
         public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner)
         {
             MethodKey mk = GetMethodKey(owner);
-            CodeGenerator2 cg = new CodeGenerator2(s, context);
-            action(cg);
-            ImmutableList<LocalInfo2> locals = cg.ResultLocals;
-            ImmutableList<ILEmit> instructions = cg.ResultInstructions;
 
             return ImmutableList<ICompileStep>.Empty
                 .Add(new MakeILMethod(this, s, owner, mk, locals))
-                .Add(new MakeILMethodBody(this, s, owner, mk, locals, instructions));
+                .Add(new MakeILMethodBody(this, s, owner, mk, locals, opcodes));
         }
     }
 }
