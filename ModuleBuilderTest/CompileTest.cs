@@ -18,31 +18,26 @@ namespace ModuleBuilderTest
         {
             return new ModuleToBuild
             (
-                ImmutableList<ElementOfModule>.Empty.Add
-                (
+                [
                     new ClassToBuild
                     (
                         "MyClass",
                         TypeAttributes.Public | TypeAttributes.Sealed,
                         ExistingTypeReference.Object,
-                        ImmutableList<TypeReference>.Empty.Add(new ExistingTypeReference(typeof(IInt32Operation))),
-                        ImmutableList<ElementOfClass>.Empty.Add
-                        (
-                            new FieldToBuild(FieldAttributes.Private, ExistingTypeReference.Int32, "iScale")
-                        )
-                        .Add
-                        (
-                            new FieldToBuild(FieldAttributes.Private, ExistingTypeReference.Int32, "jScale")
-                        )
-                        .Add
-                        (
+                        [
+                            new ExistingTypeReference(typeof(IInt32Operation))
+                        ],
+                        [
+                            new FieldToBuild(FieldAttributes.Private, ExistingTypeReference.Int32, "iScale"),
+                            new FieldToBuild(FieldAttributes.Private, ExistingTypeReference.Int32, "jScale"),
                             new ILConstructorToBuild
                             (
                                 MethodAttributes.Public,
                                 "this",
-                                ImmutableList<ParamInfo>.Empty
-                                    .Add(new ParamInfo("iScale", ExistingTypeReference.Int32))
-                                    .Add(new ParamInfo("jScale", ExistingTypeReference.Int32)),
+                                [
+                                    new ParamInfo("iScale", ExistingTypeReference.Int32),
+                                    new ParamInfo("jScale", ExistingTypeReference.Int32)
+                                ],
                                 CodeGenerator.Empty
                                     .LoadArg("this")
                                     .LoadArg("iScale")
@@ -52,19 +47,17 @@ namespace ModuleBuilderTest
                                     .StoreField(new FieldKeyReference(new FieldKey(new TypeKey("MyClass"), "jScale", ExistingTypeReference.Int32)))
                                     .Return()
                                     .Results
-                            )
-                        )
-                        .Add
-                        (
+                            ),
                             new ILMethodToBuild
                             (
                                 "Operate",
                                 MethodAttributes.Public | MethodAttributes.Virtual,
                                 ExistingTypeReference.Int32,
                                 Option<Symbol>.Some("this"),
-                                ImmutableList<ParamInfo>.Empty
-                                    .Add(new ParamInfo("i", ExistingTypeReference.Int32))
-                                    .Add(new ParamInfo("j", ExistingTypeReference.Int32)),
+                                [
+                                    new ParamInfo("i", ExistingTypeReference.Int32),
+                                    new ParamInfo("j", ExistingTypeReference.Int32)
+                                ],
                                 CodeGenerator.Empty
                                     .LoadArg("i")
                                     .LoadArg("this")
@@ -77,10 +70,10 @@ namespace ModuleBuilderTest
                                     .Add()
                                     .Return()
                                     .Results
-                            )
-                        )
+                            ),
+                        ]
                     )
-                )
+                ]
             );
         }
 
@@ -94,7 +87,9 @@ namespace ModuleBuilderTest
 
             ImmutableDictionary<ItemKey, Type> results = mb.Compile(GetTestModule());
             Type myClass = results[new CompletedTypeKey("MyClass")];
-            IInt32Operation myInstance = (IInt32Operation)myClass.GetConstructor(new Type[] { typeof(int), typeof(int) }).Invoke(new object[] { 100, 10 });
+            ConstructorInfo? ci = myClass.GetConstructor(new Type[] { typeof(int), typeof(int) });
+            Assert.IsNotNull(ci, "Constructor not found");
+            IInt32Operation myInstance = (IInt32Operation)ci.Invoke(new object[] { 100, 10 });
             
             int value = myInstance.Operate(3, 8);
             Assert.AreEqual(380, value);
