@@ -1,5 +1,6 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Sunlighter.ModuleBuilderLib;
+using Sunlighter.OptionLib;
 using System;
 using System.Collections.Immutable;
 using System.Reflection;
@@ -62,7 +63,7 @@ namespace ModuleBuilderTest
                                 "Operate",
                                 MethodAttributes.Public | MethodAttributes.Virtual,
                                 ExistingTypeReference.Int32,
-                                new Some<Symbol>("this"),
+                                Option<Symbol>.Some("this"),
                                 ImmutableList<ParamInfo>.Empty
                                     .Add(new ParamInfo("i", ExistingTypeReference.Int32))
                                     .Add(new ParamInfo("j", ExistingTypeReference.Int32)),

@@ -5,6 +5,7 @@ using System.Text;
 using System.Reflection.Emit;
 using System.Reflection;
 using System.Collections.Immutable;
+using Sunlighter.OptionLib;
 
 namespace Sunlighter.ModuleBuilderLib
 {
@@ -685,7 +686,7 @@ namespace Sunlighter.ModuleBuilderLib
             }
             else
             {
-                return Option<TypeReference>.None();
+                return Option<TypeReference>.None;
             }
         }
 
@@ -845,7 +846,7 @@ namespace Sunlighter.ModuleBuilderLib
         {
             if (openGenericType.IsInterface)
             {
-                return Option<TypeReference>.None();
+                return Option<TypeReference>.None;
             }
             else
             {

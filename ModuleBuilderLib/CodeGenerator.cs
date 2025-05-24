@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Sunlighter.OptionLib;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
@@ -410,7 +411,7 @@ namespace Sunlighter.ModuleBuilderLib
             {
                 if (predicate(item)) return Option<T>.Some(item);
             }
-            return Option<T>.None();
+            return Option<T>.None;
         }
     }
 }

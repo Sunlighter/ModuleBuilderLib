@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Sunlighter.OptionLib;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -1379,7 +1380,7 @@ namespace Sunlighter.ModuleBuilderLib
 
                 if (parent.attributes.HasFlag(MethodAttributes.Static))
                 {
-                    Utils.ILCompile(symbolTable, instructions, locals, Option<Symbol>.None(), parent.parameters, ilg, vars);
+                    Utils.ILCompile(symbolTable, instructions, locals, Option<Symbol>.None, parent.parameters, ilg, vars);
                 }
                 else
                 {

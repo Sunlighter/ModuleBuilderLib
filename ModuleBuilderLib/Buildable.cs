@@ -5,6 +5,7 @@ using System.Text;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Linq;
+using Sunlighter.OptionLib;
 
 namespace Sunlighter.ModuleBuilderLib
 {
