@@ -207,7 +207,11 @@ namespace Sunlighter.ModuleBuilderLib
             public void Compile(System.Reflection.Emit.ModuleBuilder mb, ImmutableDictionary<ItemKey, SaBox<object>> vars)
             {
                 TypeBuilder tb = (TypeBuilder)(vars[classKey].Value);
+#if NETSTANDARD2_0
+                Type t = (Type)tb.CreateTypeInfo();
+#else
                 Type t = tb.CreateType();
+#endif
                 vars[completedClassKey].Value = t;
             }
 
