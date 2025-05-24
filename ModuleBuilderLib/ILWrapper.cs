@@ -1,11 +1,9 @@
 ﻿using Sunlighter.OptionLib;
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
-using System.Text;
 
 namespace Sunlighter.ModuleBuilderLib
 {
@@ -71,7 +69,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class ILEmitNoArg : ILEmit
     {
-        private ILNoArg insn;
+        private readonly ILNoArg insn;
 
         public ILEmitNoArg(ILNoArg insn)
         {
@@ -294,7 +292,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class ILEmitLabel : ILEmit
     {
-        private Symbol name;
+        private readonly Symbol name;
 
         public ILEmitLabel(Symbol name)
         {
@@ -331,8 +329,8 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class ILEmitBranch : ILEmit
     {
-        private ILBranch branch;
-        private Symbol target;
+        private readonly ILBranch branch;
+        private readonly Symbol target;
 
         public ILEmitBranch(ILBranch branch, Symbol target)
         {

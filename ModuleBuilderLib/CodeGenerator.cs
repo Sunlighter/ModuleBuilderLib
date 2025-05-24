@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Text;
 
 namespace Sunlighter.ModuleBuilderLib
 {
@@ -31,7 +30,7 @@ namespace Sunlighter.ModuleBuilderLib
             this.labelStack = ImmutableStack<Symbol>.Empty;
         }
 
-        private static CodeGenerator _empty = new CodeGenerator();
+        private static readonly CodeGenerator _empty = new CodeGenerator();
 
         public static CodeGenerator Empty { get { return _empty; } }
 

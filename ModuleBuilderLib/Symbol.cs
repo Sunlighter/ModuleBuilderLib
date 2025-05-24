@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Sunlighter.ModuleBuilderLib
 {
@@ -146,8 +144,8 @@ namespace Sunlighter.ModuleBuilderLib
             return interned && (this.name == name);
         }
 
-        private static byte[] internedHeaderHashBytes = new byte[] { 0x1A, 0x2B, 0x3F };
-        private static byte[] uninternedHeaderHashBytes = new byte[] { 0x3E, 0xAD, 0x0E };
+        private static readonly byte[] internedHeaderHashBytes = new byte[] { 0x1A, 0x2B, 0x3F };
+        private static readonly byte[] uninternedHeaderHashBytes = new byte[] { 0x3E, 0xAD, 0x0E };
 
         public void AddToHash(IHashGenerator hg)
         {

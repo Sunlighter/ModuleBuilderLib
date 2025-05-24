@@ -1,11 +1,10 @@
-﻿using System;
+﻿using Sunlighter.OptionLib;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Reflection.Emit;
-using System.Reflection;
 using System.Collections.Immutable;
-using Sunlighter.OptionLib;
+using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
 
 namespace Sunlighter.ModuleBuilderLib
 {
@@ -110,7 +109,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class CompletedTypeKey : ItemKey
     {
-        private Symbol name;
+        private readonly Symbol name;
 
         public CompletedTypeKey(Symbol name)
         {
@@ -395,7 +394,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class TypeKeyReference : TypeReference
     {
-        private TypeKey typeKey;
+        private readonly TypeKey typeKey;
 
         public TypeKeyReference(TypeKey typeKey)
         {
@@ -518,7 +517,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class ExistingTypeReference : TypeReference
     {
-        private Type existingType;
+        private readonly Type existingType;
 
         public ExistingTypeReference(Type existingType)
         {
@@ -571,58 +570,58 @@ namespace Sunlighter.ModuleBuilderLib
 
 #region Constants
 
-        private static Lazy<ExistingTypeReference> theVoid = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(void)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theVoid = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(void)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Void { get { return theVoid.Value; } }
 
-        private static Lazy<ExistingTypeReference> theBool = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(bool)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theBool = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(bool)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Boolean { get { return theBool.Value; } }
 
-        private static Lazy<ExistingTypeReference> theChar = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(char)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theChar = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(char)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Char { get { return theChar.Value; } }
 
-        private static Lazy<ExistingTypeReference> theString = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(string)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theString = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(string)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference String { get { return theString.Value; } }
 
-        private static Lazy<ExistingTypeReference> theByte = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(byte)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theByte = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(byte)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Byte { get { return theByte.Value; } }
 
-        private static Lazy<ExistingTypeReference> theInt16 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(short)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theInt16 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(short)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Int16 { get { return theInt16.Value; } }
 
-        private static Lazy<ExistingTypeReference> theInt32 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(int)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theInt32 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(int)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Int32 { get { return theInt32.Value; } }
 
-        private static Lazy<ExistingTypeReference> theInt64 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(long)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theInt64 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(long)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Int64 { get { return theInt64.Value; } }
 
-        private static Lazy<ExistingTypeReference> theIntPtr = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(IntPtr)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theIntPtr = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(IntPtr)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference IntPtr { get { return theIntPtr.Value; } }
 
-        private static Lazy<ExistingTypeReference> theSByte = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(sbyte)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theSByte = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(sbyte)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference SByte { get { return theSByte.Value; } }
 
-        private static Lazy<ExistingTypeReference> theUInt16 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(ushort)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theUInt16 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(ushort)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference UInt16 { get { return theUInt16.Value; } }
 
-        private static Lazy<ExistingTypeReference> theUInt32 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(uint)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theUInt32 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(uint)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference UInt32 { get { return theUInt32.Value; } }
 
-        private static Lazy<ExistingTypeReference> theUInt64 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(ulong)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theUInt64 = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(ulong)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference UInt64 { get { return theUInt64.Value; } }
 
-        private static Lazy<ExistingTypeReference> theUIntPtr = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(UIntPtr)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theUIntPtr = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(UIntPtr)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference UIntPtr { get { return theUIntPtr.Value; } }
 
-        private static Lazy<ExistingTypeReference> theSingle = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(float)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theSingle = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(float)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Single { get { return theSingle.Value; } }
 
-        private static Lazy<ExistingTypeReference> theDouble = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(double)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theDouble = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(double)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Double { get { return theDouble.Value; } }
 
-        private static Lazy<ExistingTypeReference> theObject = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(object)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theObject = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(object)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Object { get { return theObject.Value; } }
 
-        private static Lazy<ExistingTypeReference> theType = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(Type)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly Lazy<ExistingTypeReference> theType = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(Type)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Type { get { return theType.Value; } }
 
 #endregion
@@ -703,8 +702,8 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class ExistingGenericTypeReference : TypeReference
     {
-        private Type openGenericType;
-        private ImmutableList<TypeReference> typeArguments;
+        private readonly Type openGenericType;
+        private readonly ImmutableList<TypeReference> typeArguments;
 
         public ExistingGenericTypeReference(Type openGenericType, ImmutableList<TypeReference> typeArguments)
         {
@@ -867,7 +866,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class ArrayTypeReference : TypeReference
     {
-        private TypeReference elementType;
+        private readonly TypeReference elementType;
 
         public ArrayTypeReference(TypeReference elementType)
         {
@@ -1094,7 +1093,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class MethodKeyReference : MethodReference
     {
-        private MethodKey methodKey;
+        private readonly MethodKey methodKey;
 
         public MethodKeyReference(MethodKey methodKey)
         {
@@ -1169,7 +1168,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class ExistingMethodReference : MethodReference
     {
-        private MethodInfo methodInfo;
+        private readonly MethodInfo methodInfo;
 
         public ExistingMethodReference(MethodInfo methodInfo)
         {
@@ -1348,7 +1347,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class ConstructorKeyReference : ConstructorReference
     {
-        private ConstructorKey constructorKey;
+        private readonly ConstructorKey constructorKey;
 
         public ConstructorKeyReference(ConstructorKey constructorKey)
         {
@@ -1415,7 +1414,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class ExistingConstructorReference : ConstructorReference
     {
-        private ConstructorInfo constructorInfo;
+        private readonly ConstructorInfo constructorInfo;
 
         public ExistingConstructorReference(ConstructorInfo constructorInfo)
         {
@@ -1482,9 +1481,9 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class FieldKey : ItemKey
     {
-        private TypeKey owner;
-        private Symbol name;
-        private TypeReference fieldType;
+        private readonly TypeKey owner;
+        private readonly Symbol name;
+        private readonly TypeReference fieldType;
 
         public FieldKey(TypeKey owner, Symbol name, TypeReference fieldType)
         {
@@ -1575,7 +1574,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class FieldKeyReference : FieldReference
     {
-        private FieldKey fieldKey;
+        private readonly FieldKey fieldKey;
 
         public FieldKeyReference(FieldKey fieldKey)
         {
@@ -1637,7 +1636,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class ExistingFieldReference : FieldReference
     {
-        private FieldInfo fieldInfo;
+        private readonly FieldInfo fieldInfo;
 
         public ExistingFieldReference(FieldInfo fieldInfo)
         {
@@ -1699,10 +1698,10 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class PropertyKey : ItemKey
     {
-        private TypeKey owner;
-        private Symbol name;
-        private TypeReference propertyType;
-        private List<TypeReference> propertyArgs;
+        private readonly TypeKey owner;
+        private readonly Symbol name;
+        private readonly TypeReference propertyType;
+        private readonly List<TypeReference> propertyArgs;
 
         public PropertyKey(TypeKey owner, Symbol name, TypeReference propertyType, IEnumerable<TypeReference> propertyArgs)
         {
@@ -1780,10 +1779,10 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class TypeAux : ItemAux
     {
-        private bool isValueType;
-        private bool isInterface;
-        private Option<TypeReference> baseType;
-        private TypeReference[] interfaces;
+        private readonly bool isValueType;
+        private readonly bool isInterface;
+        private readonly Option<TypeReference> baseType;
+        private readonly TypeReference[] interfaces;
 
         public TypeAux(bool isValueType, bool isInterface, Option<TypeReference> baseType, IEnumerable<TypeReference> interfaces)
         {
@@ -1804,8 +1803,8 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class MethodAux : ItemAux
     {
-        private MethodAttributes attributes;
-        private TypeReference returnType;
+        private readonly MethodAttributes attributes;
+        private readonly TypeReference returnType;
 
         public MethodAux(MethodAttributes attributes, TypeReference returnType)
         {
@@ -1820,7 +1819,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class ConstructorAux : ItemAux
     {
-        private MethodAttributes attributes;
+        private readonly MethodAttributes attributes;
 
         public ConstructorAux(MethodAttributes attributes)
         {
@@ -1840,7 +1839,7 @@ namespace Sunlighter.ModuleBuilderLib
 
     public class SymbolTable
     {
-        private static SymbolTable empty = new SymbolTable();
+        private static readonly SymbolTable empty = new SymbolTable();
 
         public static SymbolTable Empty { get { return empty; } }
 

@@ -1,7 +1,5 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Sunlighter.ModuleBuilderLib;
+﻿using Sunlighter.ModuleBuilderLib;
 using Sunlighter.OptionLib;
-using System;
 using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Emit;
