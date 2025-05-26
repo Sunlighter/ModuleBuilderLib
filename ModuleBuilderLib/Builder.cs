@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection.Emit;
-using System.Text;
 
 namespace Sunlighter.ModuleBuilderLib
 {
