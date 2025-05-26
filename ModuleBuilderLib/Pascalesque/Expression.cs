@@ -1660,6 +1660,7 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
         }
     }
 
+    [Record]
     public sealed class LetLoopExpr2 : Expression2
     {
         private readonly Symbol loopName;
@@ -1680,6 +1681,18 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
 
             equivalency = new Lazy<Expression2>(MakeEquivalency, false);
         }
+
+        [Bind("loopName")]
+        public Symbol LoopName => loopName;
+
+        [Bind("loopReturnType")]
+        public TypeReference LoopReturnType => loopReturnType;
+
+        [Bind("clauses")]
+        public ImmutableList<LetClause2> Clauses => clauses;
+
+        [Bind("body")]
+        public Expression2 Body => body;
 
         private Expression2 MakeEquivalency()
         {
@@ -1756,6 +1769,7 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
         }
     }
 
+    [Record]
     public sealed class LambdaExpr2 : Expression2
     {
         private readonly ImmutableList<ParamInfo> parameters;
@@ -1768,6 +1782,12 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
             this.body = body;
             this.lambdaObjTypeName = Symbol.Gensym();
         }
+
+        [Bind("parameters")]
+        public ImmutableList<ParamInfo> Parameters => parameters;
+
+        [Bind("body")]
+        public Expression2 Body => body;
 
         public override EnvSpec GetEnvSpec()
         {
@@ -1791,12 +1811,6 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
                 return TypeReference.GetFuncType(t);
             }
         }
-
-        [Bind("parameters")]
-        public ImmutableList<ParamInfo> Parameters => parameters;
-
-        [Bind("body")]
-        public Expression2 Body => body;
 
         private sealed class CompileStepInfo
         {
@@ -2698,6 +2712,7 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
         }
     }
 
+    [Record]
     public sealed class ConvertExpr2 : Expression2
     {
         private readonly ConvertTo convertTo;
@@ -2783,6 +2798,7 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
         }
     }
 
+    [Record]
     public sealed class RegardAsExpr2 : Expression2
     {
         private readonly ConvertTo regardAsWhat;
