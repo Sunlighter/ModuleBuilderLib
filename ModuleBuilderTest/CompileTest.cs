@@ -85,7 +85,7 @@ namespace ModuleBuilderTest
             AssemblyBuilder ab = AssemblyBuilder.DefineDynamicAssembly(aName, AssemblyBuilderAccess.RunAndCollect);
             ModuleBuilder mb = ab.DefineDynamicModule(name);
 
-            ImmutableDictionary<ItemKey, Type> results = mb.Compile(GetTestModule());
+            ImmutableSortedDictionary<ItemKey, Type> results = mb.Compile(GetTestModule());
             Type myClass = results[new CompletedTypeKey("MyClass")];
             ConstructorInfo? ci = myClass.GetConstructor(new Type[] { typeof(int), typeof(int) });
             Assert.IsNotNull(ci, "Constructor not found");

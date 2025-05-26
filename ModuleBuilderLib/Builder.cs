@@ -43,7 +43,7 @@ namespace Sunlighter.ModuleBuilderLib
             return results;
         }
 
-        public static ImmutableDictionary<ItemKey, Type> Compile(this ModuleBuilder mb, ModuleToBuild mtb)
+        public static ImmutableSortedDictionary<ItemKey, Type> Compile(this ModuleBuilder mb, ModuleToBuild mtb)
         {
             SymbolTable s = SymbolTable.Empty;
             s = mtb.DefineSymbols(s);
@@ -131,7 +131,7 @@ namespace Sunlighter.ModuleBuilderLib
 
             ImmutableSortedSet<ItemKey> phase2Results = ImmutableSortedSet<ItemKey>.Empty.UnionAll(steps.Where(x => x.Phase == 2).Select(x => x.Outputs));
 
-            return phase2Results.ToImmutableDictionary(x => x, x => (Type)(references[x].Value));
+            return phase2Results.ToImmutableSortedDictionary(x => x, x => (Type)(references[x].Value));
         }
     }
 
