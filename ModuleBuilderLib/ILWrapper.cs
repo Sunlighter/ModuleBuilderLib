@@ -1,4 +1,5 @@
 ﻿using Sunlighter.OptionLib;
+using Sunlighter.TypeTraitsLib.Building;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -9,18 +10,18 @@ namespace Sunlighter.ModuleBuilderLib
 {
     public class ILContext
     {
-        private readonly ImmutableDictionary<Symbol, Label> labels;
-        private readonly ImmutableDictionary<Symbol, LocalBuilder> locals;
-        private readonly ImmutableDictionary<Symbol, int> parameters;
-        private readonly ImmutableDictionary<ItemKey, SaBox<object>> references;
+        private readonly ImmutableSortedDictionary<Symbol, Label> labels;
+        private readonly ImmutableSortedDictionary<Symbol, LocalBuilder> locals;
+        private readonly ImmutableSortedDictionary<Symbol, int> parameters;
+        private readonly ImmutableSortedDictionary<ItemKey, SaBox<object>> references;
         private readonly SymbolTable symbolTable;
 
         public ILContext
         (
-            ImmutableDictionary<Symbol, Label> labels,
-            ImmutableDictionary<Symbol, LocalBuilder> locals,
-            ImmutableDictionary<Symbol, int> parameters,
-            ImmutableDictionary<ItemKey, SaBox<object>> references,
+            ImmutableSortedDictionary<Symbol, Label> labels,
+            ImmutableSortedDictionary<Symbol, LocalBuilder> locals,
+            ImmutableSortedDictionary<Symbol, int> parameters,
+            ImmutableSortedDictionary<ItemKey, SaBox<object>> references,
             SymbolTable symbolTable
         )
         {
@@ -31,22 +32,23 @@ namespace Sunlighter.ModuleBuilderLib
             this.symbolTable = symbolTable;
         }
 
-        public ImmutableDictionary<Symbol, Label> Labels { get { return labels; } }
-        public ImmutableDictionary<Symbol, LocalBuilder> Locals { get { return locals; } }
-        public ImmutableDictionary<Symbol, int> Parameters { get { return parameters; } }
-        public ImmutableDictionary<ItemKey, SaBox<object>> References { get { return references; } }
+        public ImmutableSortedDictionary<Symbol, Label> Labels { get { return labels; } }
+        public ImmutableSortedDictionary<Symbol, LocalBuilder> Locals { get { return locals; } }
+        public ImmutableSortedDictionary<Symbol, int> Parameters { get { return parameters; } }
+        public ImmutableSortedDictionary<ItemKey, SaBox<object>> References { get { return references; } }
         public SymbolTable SymbolTable { get { return symbolTable; } }
     }
 
+    [UnionOfDescendants]
     public abstract class ILEmit
     {
-        public virtual ImmutableHashSet<Symbol> LabelsDefined { get { return ImmutableHashSet<Symbol>.Empty; } }
+        public virtual ImmutableSortedSet<Symbol> LabelsDefined { get { return ImmutableSortedSet<Symbol>.Empty; } }
 
-        public virtual ImmutableHashSet<Symbol> LabelsUsed { get { return ImmutableHashSet<Symbol>.Empty; } }
+        public virtual ImmutableSortedSet<Symbol> LabelsUsed { get { return ImmutableSortedSet<Symbol>.Empty; } }
 
-        public virtual ImmutableHashSet<Symbol> LabelsWithoutAutoCreate { get { return ImmutableHashSet<Symbol>.Empty; } }
+        public virtual ImmutableSortedSet<Symbol> LabelsWithoutAutoCreate { get { return ImmutableSortedSet<Symbol>.Empty; } }
 
-        public virtual ImmutableHashSet<ItemKey> References { get { return ImmutableHashSet<ItemKey>.Empty; } }
+        public virtual ImmutableSortedSet<ItemKey> References { get { return ImmutableSortedSet<ItemKey>.Empty; } }
 
         public abstract void Emit(ILGenerator ilg, ILContext context);
     }
@@ -67,7 +69,8 @@ namespace Sunlighter.ModuleBuilderLib
         LoadObjRef, StoreObjRef
     }
 
-    public class ILEmitNoArg : ILEmit
+    [Record]
+    public sealed class ILEmitNoArg : ILEmit
     {
         private readonly ILNoArg insn;
 
@@ -75,6 +78,9 @@ namespace Sunlighter.ModuleBuilderLib
         {
             this.insn = insn;
         }
+
+        [Bind("insn")]
+        public ILNoArg Instruction => insn;
 
         public override void Emit(ILGenerator ilg, ILContext context)
         {
@@ -290,7 +296,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitLabel : ILEmit
+    [Record]
+    public sealed class ILEmitLabel : ILEmit
     {
         private readonly Symbol name;
 
@@ -299,11 +306,14 @@ namespace Sunlighter.ModuleBuilderLib
             this.name = name;
         }
 
-        public override ImmutableHashSet<Symbol> LabelsDefined
+        [Bind("name")]
+        public Symbol Name => name;
+
+        public override ImmutableSortedSet<Symbol> LabelsDefined
         {
             get
             {
-                return ImmutableHashSet<Symbol>.Empty.Add(name);
+                return ImmutableSortedSet<Symbol>.Empty.Add(name);
             }
         }
 
@@ -327,7 +337,8 @@ namespace Sunlighter.ModuleBuilderLib
         Leave, Leave_S,
     }
 
-    public class ILEmitBranch : ILEmit
+    [Record]
+    public sealed class ILEmitBranch : ILEmit
     {
         private readonly ILBranch branch;
         private readonly Symbol target;
@@ -338,11 +349,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.target = target;
         }
 
-        public override ImmutableHashSet<Symbol> LabelsUsed
+        [Bind("branch")]
+        public ILBranch BranchType => branch;
+
+        [Bind("target")]
+        public Symbol Target => target;
+
+        public override ImmutableSortedSet<Symbol> LabelsUsed
         {
             get
             {
-                return ImmutableHashSet<Symbol>.Empty.Add(target);
+                return ImmutableSortedSet<Symbol>.Empty.Add(target);
             }
         }
 
@@ -417,7 +434,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitSwitch : ILEmit
+    [Record]
+    public sealed class ILEmitSwitch : ILEmit
     {
         private readonly ImmutableList<Symbol> targets;
 
@@ -426,11 +444,14 @@ namespace Sunlighter.ModuleBuilderLib
             this.targets = targets;
         }
 
-        public override ImmutableHashSet<Symbol> LabelsUsed
+        [Bind("targets")]
+        public ImmutableList<Symbol> Targets => targets;
+
+        public override ImmutableSortedSet<Symbol> LabelsUsed
         {
             get
             {
-                return ImmutableHashSet<Symbol>.Empty.Union(targets);
+                return ImmutableSortedSet<Symbol>.Empty.Union(targets);
             }
         }
 
@@ -440,7 +461,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitLoadArg : ILEmit
+    [Record]
+    public sealed class ILEmitLoadArg : ILEmit
     {
         private readonly Symbol name;
 
@@ -449,13 +471,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.name = name;
         }
 
+        [Bind("name")]
+        public Symbol Name => name;
+
         public override void Emit(ILGenerator ilg, ILContext context)
         {
             ilg.LoadArg(context.Parameters[name]);
         }
     }
 
-    public class ILEmitLoadArgAddress : ILEmit
+    [Record]
+    public sealed class ILEmitLoadArgAddress : ILEmit
     {
         private readonly Symbol name;
 
@@ -464,13 +490,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.name = name;
         }
 
+        [Bind("name")]
+        public Symbol Name => name;
+
         public override void Emit(ILGenerator ilg, ILContext context)
         {
             ilg.LoadArgAddress(context.Parameters[name]);
         }
     }
 
-    public class ILEmitStoreArg : ILEmit
+    [Record]
+    public sealed class ILEmitStoreArg : ILEmit
     {
         private readonly Symbol name;
 
@@ -479,13 +509,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.name = name;
         }
 
+        [Bind("name")]
+        public Symbol Name => name;
+
         public override void Emit(ILGenerator ilg, ILContext context)
         {
             ilg.StoreArg(context.Parameters[name]);
         }
     }
 
-    public class ILEmitLoadLocal : ILEmit
+    [Record]
+    public sealed class ILEmitLoadLocal : ILEmit
     {
         private readonly Symbol name;
 
@@ -494,13 +528,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.name = name;
         }
 
+        [Bind("name")]
+        public Symbol Name => name;
+
         public override void Emit(ILGenerator ilg, ILContext context)
         {
             ilg.LoadLocal(context.Locals[name]);
         }
     }
 
-    public class ILEmitLoadLocalAddress : ILEmit
+    [Record]
+    public sealed class ILEmitLoadLocalAddress : ILEmit
     {
         private readonly Symbol name;
 
@@ -509,13 +547,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.name = name;
         }
 
+        [Bind("name")]
+        public Symbol Name => name;
+
         public override void Emit(ILGenerator ilg, ILContext context)
         {
             ilg.LoadLocalAddress(context.Locals[name]);
         }
     }
 
-    public class ILEmitStoreLocal : ILEmit
+    [Record]
+    public sealed class ILEmitStoreLocal : ILEmit
     {
         private readonly Symbol name;
 
@@ -524,13 +566,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.name = name;
         }
 
+        [Bind("name")]
+        public Symbol Name => name;
+
         public override void Emit(ILGenerator ilg, ILContext context)
         {
             ilg.StoreLocal(context.Locals[name]);
         }
     }
 
-    public class ILEmitLoadInt : ILEmit
+    [Record]
+    public sealed class ILEmitLoadInt : ILEmit
     {
         private readonly int literal;
 
@@ -539,13 +585,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.literal = literal;
         }
 
+        [Bind("literal")]
+        public int Value => literal;
+
         public override void Emit(ILGenerator ilg, ILContext context)
         {
             ilg.LoadInt(literal);
         }
     }
 
-    public class ILEmitLoadLong : ILEmit
+    [Record]
+    public sealed class ILEmitLoadLong : ILEmit
     {
         private readonly long literal;
 
@@ -554,13 +604,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.literal = literal;
         }
 
+        [Bind("literal")]
+        public long Value => literal;
+
         public override void Emit(ILGenerator ilg, ILContext context)
         {
             ilg.LoadLong(literal);
         }
     }
 
-    public class ILEmitLoadFloat : ILEmit
+    [Record]
+    public sealed class ILEmitLoadFloat : ILEmit
     {
         private readonly float literal;
 
@@ -569,13 +623,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.literal = literal;
         }
 
+        [Bind("literal")]
+        public float Value => literal;
+
         public override void Emit(ILGenerator ilg, ILContext context)
         {
             ilg.LoadFloat(literal);
         }
     }
 
-    public class ILEmitLoadDouble : ILEmit
+    [Record]
+    public sealed class ILEmitLoadDouble : ILEmit
     {
         private readonly double literal;
 
@@ -584,13 +642,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.literal = literal;
         }
 
+        [Bind("literal")]
+        public double Value => literal;
+
         public override void Emit(ILGenerator ilg, ILContext context)
         {
             ilg.LoadDouble(literal);
         }
     }
 
-    public class ILEmitLoadString : ILEmit
+    [Record]
+    public sealed class ILEmitLoadString : ILEmit
     {
         private readonly string literal;
 
@@ -598,6 +660,9 @@ namespace Sunlighter.ModuleBuilderLib
         {
             this.literal = literal;
         }
+
+        [Bind("literal")]
+        public string Value => literal;
 
         public override void Emit(ILGenerator ilg, ILContext context)
         {
@@ -615,7 +680,8 @@ namespace Sunlighter.ModuleBuilderLib
         StoreStatic
     }
 
-    public class ILEmitFieldOp : ILEmit
+    [Record]
+    public sealed class ILEmitFieldOp : ILEmit
     {
         private readonly ILFieldOp fieldOp;
         private readonly FieldReference fieldReference;
@@ -626,7 +692,13 @@ namespace Sunlighter.ModuleBuilderLib
             this.fieldReference = fieldReference;
         }
 
-        public override ImmutableHashSet<ItemKey> References
+        [Bind("fieldOp")]
+        public ILFieldOp FieldOp => fieldOp;
+
+        [Bind("fieldReference")]
+        public FieldReference FieldReference => fieldReference;
+
+        public override ImmutableSortedSet<ItemKey> References
         {
             get
             {
@@ -662,7 +734,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitLoadMethodToken : ILEmit
+    [Record]
+    public sealed class ILEmitLoadMethodToken : ILEmit
     {
         private readonly MethodReference methodReference;
 
@@ -671,7 +744,10 @@ namespace Sunlighter.ModuleBuilderLib
             this.methodReference = methodReference;
         }
 
-        public override ImmutableHashSet<ItemKey> References
+        [Bind("methodReference")]
+        public MethodReference Method => methodReference;
+
+        public override ImmutableSortedSet<ItemKey> References
         {
             get
             {
@@ -685,7 +761,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitLoadFieldToken : ILEmit
+    [Record]
+    public sealed class ILEmitLoadFieldToken : ILEmit
     {
         private readonly FieldReference fieldReference;
 
@@ -694,7 +771,10 @@ namespace Sunlighter.ModuleBuilderLib
             this.fieldReference = fieldReference;
         }
 
-        public override ImmutableHashSet<ItemKey> References
+        [Bind("fieldReference")]
+        public FieldReference Field => fieldReference;
+
+        public override ImmutableSortedSet<ItemKey> References
         {
             get
             {
@@ -708,7 +788,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitLoadConstructorToken : ILEmit
+    [Record]
+    public sealed class ILEmitLoadConstructorToken : ILEmit
     {
         private readonly ConstructorReference constructorReference;
 
@@ -717,7 +798,10 @@ namespace Sunlighter.ModuleBuilderLib
             this.constructorReference = constructorReference;
         }
 
-        public override ImmutableHashSet<ItemKey> References
+        [Bind("constructorReference")]
+        public ConstructorReference Constructor => constructorReference;
+
+        public override ImmutableSortedSet<ItemKey> References
         {
             get
             {
@@ -731,7 +815,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitLoadTypeToken : ILEmit
+    [Record]
+    public sealed class ILEmitLoadTypeToken : ILEmit
     {
         private readonly TypeReference typeReference;
 
@@ -740,7 +825,10 @@ namespace Sunlighter.ModuleBuilderLib
             this.typeReference = typeReference;
         }
 
-        public override ImmutableHashSet<ItemKey> References
+        [Bind("typeReference")]
+        public TypeReference TypeArg => typeReference;
+
+        public override ImmutableSortedSet<ItemKey> References
         {
             get
             {
@@ -754,7 +842,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitNewObj : ILEmit
+    [Record]
+    public sealed class ILEmitNewObj : ILEmit
     {
         private readonly ConstructorReference constructorReference;
 
@@ -763,7 +852,10 @@ namespace Sunlighter.ModuleBuilderLib
             this.constructorReference = constructorReference;
         }
 
-        public override ImmutableHashSet<ItemKey> References
+        [Bind("constructorReference")]
+        public ConstructorReference Constructor => constructorReference;
+
+        public override ImmutableSortedSet<ItemKey> References
         {
             get
             {
@@ -777,7 +869,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitCall : ILEmit
+    [Record]
+    public sealed class ILEmitCall : ILEmit
     {
         private readonly MethodReference methodReference;
 
@@ -786,7 +879,10 @@ namespace Sunlighter.ModuleBuilderLib
             this.methodReference = methodReference;
         }
 
-        public override ImmutableHashSet<ItemKey> References
+        [Bind("methodReference")]
+        public MethodReference Method => methodReference;
+
+        public override ImmutableSortedSet<ItemKey> References
         {
             get
             {
@@ -800,7 +896,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitConstructorCall : ILEmit
+    [Record]
+    public sealed class ILEmitConstructorCall : ILEmit
     {
         private readonly ConstructorReference constructorReference;
 
@@ -809,7 +906,10 @@ namespace Sunlighter.ModuleBuilderLib
             this.constructorReference = constructorReference;
         }
 
-        public override ImmutableHashSet<ItemKey> References
+        [Bind("constructorReference")]
+        public ConstructorReference Constructor => constructorReference;
+
+        public override ImmutableSortedSet<ItemKey> References
         {
             get
             {
@@ -823,7 +923,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitCallVirt : ILEmit
+    [Record]
+    public sealed class ILEmitCallVirt : ILEmit
     {
         private readonly MethodReference methodReference;
 
@@ -832,7 +933,10 @@ namespace Sunlighter.ModuleBuilderLib
             this.methodReference = methodReference;
         }
 
-        public override ImmutableHashSet<ItemKey> References
+        [Bind("methodReference")]
+        public MethodReference Method => methodReference;
+
+        public override ImmutableSortedSet<ItemKey> References
         {
             get
             {
@@ -861,7 +965,8 @@ namespace Sunlighter.ModuleBuilderLib
         StoreElement
     }
 
-    public class ILEmitTypeOp : ILEmit
+    [Record]
+    public sealed class ILEmitTypeOp : ILEmit
     {
         private readonly ILTypeOp typeOp;
         private readonly TypeReference typeReference;
@@ -872,7 +977,13 @@ namespace Sunlighter.ModuleBuilderLib
             this.typeReference = typeReference;
         }
 
-        public override ImmutableHashSet<ItemKey> References
+        [Bind("typeOp")]
+        public ILTypeOp TypeOp => typeOp;
+
+        [Bind("typeReference")]
+        public TypeReference TypeArg => typeReference;
+
+        public override ImmutableSortedSet<ItemKey> References
         {
             get
             {
@@ -924,7 +1035,8 @@ namespace Sunlighter.ModuleBuilderLib
 
     }
 
-    public class ILEmitUnaligned : ILEmit
+    [Record]
+    public sealed class ILEmitUnaligned : ILEmit
     {
         private readonly Alignment a;
 
@@ -933,13 +1045,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.a = a;
         }
 
+        [Bind("a")]
+        public Alignment Alignment => a;
+
         public override void Emit(ILGenerator ilg, ILContext context)
         {
             ilg.Unaligned(a);
         }
     }
 
-    public class ILEmitBeginExceptionBlock : ILEmit
+    [Record]
+    public sealed class ILEmitBeginExceptionBlock : ILEmit
     {
         private readonly Symbol endOfBlock;
 
@@ -948,19 +1064,22 @@ namespace Sunlighter.ModuleBuilderLib
             this.endOfBlock = endOfBlock;
         }
 
-        public override ImmutableHashSet<Symbol> LabelsDefined
+        [Bind("endOfBlock")]
+        public Symbol EndOfBlock => endOfBlock;
+
+        public override ImmutableSortedSet<Symbol> LabelsDefined
         {
             get
             {
-                return ImmutableHashSet<Symbol>.Empty.Add(endOfBlock);
+                return ImmutableSortedSet<Symbol>.Empty.Add(endOfBlock);
             }
         }
 
-        public override ImmutableHashSet<Symbol> LabelsWithoutAutoCreate
+        public override ImmutableSortedSet<Symbol> LabelsWithoutAutoCreate
         {
             get
             {
-                return ImmutableHashSet<Symbol>.Empty.Add(endOfBlock);
+                return ImmutableSortedSet<Symbol>.Empty.Add(endOfBlock);
             }
         }
 
@@ -971,7 +1090,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitBeginCatchBlock : ILEmit
+    [Record]
+    public sealed class ILEmitBeginCatchBlock : ILEmit
     {
         private readonly TypeReference exceptionType;
 
@@ -980,7 +1100,10 @@ namespace Sunlighter.ModuleBuilderLib
             this.exceptionType = exceptionType;
         }
 
-        public override ImmutableHashSet<ItemKey> References
+        [Bind("exceptionType")]
+        public TypeReference ExceptionType => exceptionType;
+
+        public override ImmutableSortedSet<ItemKey> References
         {
             get
             {
@@ -994,7 +1117,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitBeginFinallyBlock : ILEmit
+    [Record]
+    public sealed class ILEmitBeginFinallyBlock : ILEmit
     {
         public ILEmitBeginFinallyBlock()
         {
@@ -1006,7 +1130,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILEmitEndExceptionBlock : ILEmit
+    [Record]
+    public sealed class ILEmitEndExceptionBlock : ILEmit
     {
         public ILEmitEndExceptionBlock()
         {
@@ -1018,37 +1143,41 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class LocalInfo
+    [Record]
+    public sealed class LocalInfo
     {
         private readonly Symbol name;
         private readonly TypeReference localType;
         private readonly bool isPinned;
 
-        public LocalInfo(Symbol name, TypeReference paramType, bool isPinned)
+        public LocalInfo(Symbol name, TypeReference localType, bool isPinned)
         {
             this.name = name;
-            this.localType = paramType;
+            this.localType = localType;
             this.isPinned = isPinned;
         }
 
-        public Symbol Name { get { return name; } }
+        [Bind("name")]
+        public Symbol Name => name;
 
-        public TypeReference LocalType { get { return localType; } }
+        [Bind("localType")]
+        public TypeReference LocalType => localType;
 
-        public bool IsPinned { get { return isPinned; } }
+        [Bind("isPinned")]
+        public bool IsPinned => isPinned;
     }
 
     public static partial class Utils
     {
-        public static void ILCompile(SymbolTable symbolTable, ImmutableList<ILEmit> instructions, ImmutableList<LocalInfo> localInfos, Option<Symbol> thisParameterName, ImmutableList<ParamInfo> paramInfos, ILGenerator ilg, ImmutableDictionary<ItemKey, SaBox<object>> vars)
+        public static void ILCompile(SymbolTable symbolTable, ImmutableList<ILEmit> instructions, ImmutableList<LocalInfo> localInfos, Option<Symbol> thisParameterName, ImmutableList<ParamInfo> paramInfos, ILGenerator ilg, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
         {
-            ImmutableHashSet<Symbol> labelsDefined = instructions.Select(x => x.LabelsDefined).UnionAll();
-            ImmutableHashSet<Symbol> labelsUsed = instructions.Select(x => x.LabelsUsed).UnionAll();
-            ImmutableHashSet<Symbol> labelsWithoutAutoCreate = instructions.Select(x => x.LabelsWithoutAutoCreate).UnionAll();
+            ImmutableSortedSet<Symbol> labelsDefined = ImmutableSortedSet<Symbol>.Empty.UnionAll(instructions.Select(x => x.LabelsDefined));
+            ImmutableSortedSet<Symbol> labelsUsed = ImmutableSortedSet<Symbol>.Empty.UnionAll(instructions.Select(x => x.LabelsUsed));
+            ImmutableSortedSet<Symbol> labelsWithoutAutoCreate = ImmutableSortedSet<Symbol>.Empty.UnionAll(instructions.Select(x => x.LabelsWithoutAutoCreate));
 
-            if (!((labelsUsed.Except(labelsDefined)).IsEmpty)) throw new Exception("Labels { " + ((labelsUsed.Except(labelsDefined)).Select(x => x.Name).Concatenate(" ")) + " } used without being defined");
+            if (!labelsUsed.Except(labelsDefined).IsEmpty) throw new Exception("Labels { " + string.Join(" ", labelsUsed.Except(labelsDefined).Select(x => x.SymbolName())) + " } used without being defined");
 
-            ImmutableDictionary<Symbol, Label> labels = ImmutableDictionary<Symbol, Label>.Empty;
+            ImmutableSortedDictionary<Symbol, Label> labels = ImmutableSortedDictionary<Symbol, Label>.Empty;
 
             foreach (Symbol s in labelsUsed)
             {
@@ -1058,14 +1187,14 @@ namespace Sunlighter.ModuleBuilderLib
                 }
             }
 
-            ImmutableDictionary<Symbol, LocalBuilder> locals = ImmutableDictionary<Symbol, LocalBuilder>.Empty;
+            ImmutableSortedDictionary<Symbol, LocalBuilder> locals = ImmutableSortedDictionary<Symbol, LocalBuilder>.Empty;
 
             foreach (LocalInfo localInfo in localInfos)
             {
                 locals = locals.Add(localInfo.Name, ilg.DeclareLocal(localInfo.LocalType.Resolve(vars), localInfo.IsPinned));
             }
 
-            ImmutableDictionary<Symbol, int> parameters = ImmutableDictionary<Symbol, int>.Empty;
+            ImmutableSortedDictionary<Symbol, int> parameters = ImmutableSortedDictionary<Symbol, int>.Empty;
 
             if (thisParameterName.HasValue)
             {
@@ -1086,7 +1215,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ILConstructorToBuild : ElementOfClass
+    [Record]
+    public sealed class ILConstructorToBuild : ElementOfClass
     {
         private readonly MethodAttributes attributes;
         private readonly Symbol thisParameterName;
@@ -1099,15 +1229,42 @@ namespace Sunlighter.ModuleBuilderLib
             MethodAttributes attributes,
             Symbol thisParameterName,
             ImmutableList<ParamInfo> parameters,
-            ValueTuple<ImmutableList<LocalInfo>, ImmutableList<ILEmit>> localsAndOpcodes
+            ImmutableList<LocalInfo> locals,
+            ImmutableList<ILEmit> opcodes
         )
         {
             this.attributes = attributes;
             this.thisParameterName = thisParameterName;
             this.parameters = parameters;
-            this.locals = localsAndOpcodes.Item1;
-            this.opcodes = localsAndOpcodes.Item2;
+            this.locals = locals;
+            this.opcodes = opcodes;
         }
+
+        public ILConstructorToBuild
+        (
+            MethodAttributes attributes,
+            Symbol thisParameterName,
+            ImmutableList<ParamInfo> parameters,
+            GeneratedCode localsAndOpcodes
+        )
+            : this(attributes, thisParameterName, parameters, localsAndOpcodes.Locals, localsAndOpcodes.Opcodes)
+        {
+        }
+
+        [Bind("attributes")]
+        public MethodAttributes Attributes => attributes;
+
+        [Bind("thisParameterName")]
+        public Symbol ThisParameterName => thisParameterName;
+
+        [Bind("parameters")]
+        public ImmutableList<ParamInfo> Parameters => parameters;
+
+        [Bind("locals")]
+        public ImmutableList<LocalInfo> Locals => locals;
+
+        [Bind("opcodes")]
+        public ImmutableList<ILEmit> Opcodes => opcodes;
 
         private ConstructorKey GetConstructorKey(TypeKey owner)
         {
@@ -1117,15 +1274,13 @@ namespace Sunlighter.ModuleBuilderLib
         private class MakeILConstructor : ICompileStep
         {
             private readonly ILConstructorToBuild parent;
-            private readonly SymbolTable symbolTable;
             private readonly TypeKey owner;
             private readonly ConstructorKey constructorKey;
             private readonly ImmutableList<LocalInfo> locals;
 
-            public MakeILConstructor(ILConstructorToBuild parent, SymbolTable symbolTable, TypeKey owner, ConstructorKey constructorKey, ImmutableList<LocalInfo> locals)
+            public MakeILConstructor(ILConstructorToBuild parent, TypeKey owner, ConstructorKey constructorKey, ImmutableList<LocalInfo> locals)
             {
                 this.parent = parent;
-                this.symbolTable = symbolTable;
                 this.owner = owner;
                 this.constructorKey = constructorKey;
                 this.locals = locals;
@@ -1133,26 +1288,26 @@ namespace Sunlighter.ModuleBuilderLib
 
             public int Phase { get { return 1; } }
 
-            public ImmutableHashSet<ItemKey> Inputs
+            public ImmutableSortedSet<ItemKey> Inputs
             {
                 get
                 {
-                    return ImmutableHashSet<ItemKey>.Empty
+                    return ImmutableSortedSet<ItemKey>.Empty
                         .Add(owner)
-                        .Union(parent.parameters.Select(x => x.ParamType.GetReferences()).UnionAll())
-                        .Union(locals.Select(x => x.LocalType.GetReferences()).UnionAll());
+                        .UnionAll(parent.parameters.Select(x => x.ParamType.GetReferences()))
+                        .UnionAll(locals.Select(x => x.LocalType.GetReferences()));
                 }
             }
 
-            public ImmutableHashSet<ItemKey> Outputs
+            public ImmutableSortedSet<ItemKey> Outputs
             {
                 get
                 {
-                    return ImmutableHashSet<ItemKey>.Empty.Add(constructorKey);
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(constructorKey);
                 }
             }
 
-            public void Compile(ModuleBuilder mb, ImmutableDictionary<ItemKey, SaBox<object>> vars)
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
             {
                 TypeBuilder oType = (TypeBuilder)(vars[owner].Value);
 
@@ -1183,30 +1338,30 @@ namespace Sunlighter.ModuleBuilderLib
 
             public int Phase { get { return 1; } }
 
-            public ImmutableHashSet<ItemKey> Inputs
+            public ImmutableSortedSet<ItemKey> Inputs
             {
                 get
                 {
-                    return ImmutableHashSet<ItemKey>.Empty
+                    return ImmutableSortedSet<ItemKey>.Empty
                         .Add(owner)
-                        .Union(parent.parameters.Select(x => x.ParamType.GetReferences()).UnionAll())
-                        .Union(locals.Select(x => x.LocalType.GetReferences()).UnionAll())
-                        .Union(instructions.Select(x => x.References).UnionAll())
+                        .UnionAll(parent.parameters.Select(x => x.ParamType.GetReferences()))
+                        .UnionAll(locals.Select(x => x.LocalType.GetReferences()))
+                        .UnionAll(instructions.Select(x => x.References))
                         .Add(constructorKey);
                 }
             }
 
-            public ImmutableHashSet<ItemKey> Outputs
+            public ImmutableSortedSet<ItemKey> Outputs
             {
                 get
                 {
-                    return ImmutableHashSet<ItemKey>.Empty;
+                    return ImmutableSortedSet<ItemKey>.Empty;
                 }
             }
 
-            public void Compile(ModuleBuilder mb, ImmutableDictionary<ItemKey, SaBox<object>> vars)
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
             {
-                TypeBuilder tb = (TypeBuilder)(vars[owner].Value);
+                //TypeBuilder tb = (TypeBuilder)(vars[owner].Value);
                 ConstructorBuilder ceb = (ConstructorBuilder)(vars[constructorKey].Value);
                 ILGenerator ilg = ceb.GetILGenerator();
 
@@ -1225,12 +1380,13 @@ namespace Sunlighter.ModuleBuilderLib
             ConstructorKey ck = GetConstructorKey(owner);
 
             return ImmutableList<ICompileStep>.Empty
-                .Add(new MakeILConstructor(this, s, owner, ck, locals))
+                .Add(new MakeILConstructor(this, owner, ck, locals))
                 .Add(new MakeILConstructorBody(this, s, owner, ck, locals, opcodes));
         }
     }
 
-    public class ILMethodToBuild : ElementOfClass
+    [Record]
+    public sealed class ILMethodToBuild : ElementOfClass
     {
         private readonly Symbol name;
         private readonly MethodAttributes attributes;
@@ -1247,7 +1403,8 @@ namespace Sunlighter.ModuleBuilderLib
             TypeReference returnType,
             Option<Symbol> thisParameterName,
             ImmutableList<ParamInfo> parameters,
-            ValueTuple<ImmutableList<LocalInfo>, ImmutableList<ILEmit>> localsAndOpcodes
+            ImmutableList<LocalInfo> locals,
+            ImmutableList<ILEmit> opcodes
         )
         {
             this.name = name;
@@ -1255,8 +1412,8 @@ namespace Sunlighter.ModuleBuilderLib
             this.returnType = returnType;
             this.thisParameterName = thisParameterName;
             this.parameters = parameters;
-            this.locals = localsAndOpcodes.Item1;
-            this.opcodes = localsAndOpcodes.Item2;
+            this.locals = locals;
+            this.opcodes = opcodes;
 
             if (attributes.HasFlag(MethodAttributes.Static) && thisParameterName.HasValue)
             {
@@ -1267,6 +1424,40 @@ namespace Sunlighter.ModuleBuilderLib
                 throw new ArgumentException("A non-static method requires a \"this\" parameter");
             }
         }
+
+        public ILMethodToBuild
+        (
+            Symbol name,
+            MethodAttributes attributes,
+            TypeReference returnType,
+            Option<Symbol> thisParameterName,
+            ImmutableList<ParamInfo> parameters,
+            GeneratedCode localsAndOpcodes
+        )
+            : this(name, attributes, returnType, thisParameterName, parameters, localsAndOpcodes.Locals, localsAndOpcodes.Opcodes)
+        {
+        }
+
+        [Bind("name")]
+        public Symbol Name => name;
+
+        [Bind("attributes")]
+        public MethodAttributes Attributes => attributes;
+
+        [Bind("returnType")]
+        public TypeReference ReturnType => returnType;
+
+        [Bind("thisParameterName")]
+        public Option<Symbol> ThisParameterName => thisParameterName;
+
+        [Bind("parameters")]
+        public ImmutableList<ParamInfo> Parameters => parameters;
+
+        [Bind("locals")]
+        public ImmutableList<LocalInfo> Locals => locals;
+
+        [Bind("opcodes")]
+        public ImmutableList<ILEmit> Opcodes => opcodes;
 
         private MethodKey GetMethodKey(TypeKey owner)
         {
@@ -1292,33 +1483,33 @@ namespace Sunlighter.ModuleBuilderLib
 
             public int Phase { get { return 1; } }
 
-            public ImmutableHashSet<ItemKey> Inputs
+            public ImmutableSortedSet<ItemKey> Inputs
             {
                 get
                 {
-                    return ImmutableHashSet<ItemKey>.Empty
+                    return ImmutableSortedSet<ItemKey>.Empty
                         .Add(owner)
-                        .Union(parent.parameters.Select(x => x.ParamType.GetReferences()).UnionAll())
-                        .Union(locals.Select(x => x.LocalType.GetReferences()).UnionAll())
+                        .UnionAll(parent.parameters.Select(x => x.ParamType.GetReferences()))
+                        .UnionAll(locals.Select(x => x.LocalType.GetReferences()))
                         .Union(symbolTable[methodKey].ReturnType.GetReferences());
                 }
             }
 
-            public ImmutableHashSet<ItemKey> Outputs
+            public ImmutableSortedSet<ItemKey> Outputs
             {
                 get
                 {
-                    return ImmutableHashSet<ItemKey>.Empty.Add(methodKey);
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(methodKey);
                 }
             }
 
-            public void Compile(ModuleBuilder mb, ImmutableDictionary<ItemKey, SaBox<object>> vars)
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
             {
                 TypeBuilder oType = (TypeBuilder)(vars[owner].Value);
 
                 MethodBuilder meb = oType.DefineMethod
                 (
-                    parent.name.Name,
+                    parent.name.SymbolName(),
                     parent.attributes,
                     symbolTable[methodKey].ReturnType.Resolve(vars),
                     methodKey.Parameters.Select(x => x.Resolve(vars)).ToArray()
@@ -1349,30 +1540,30 @@ namespace Sunlighter.ModuleBuilderLib
 
             public int Phase { get { return 1; } }
 
-            public ImmutableHashSet<ItemKey> Inputs
+            public ImmutableSortedSet<ItemKey> Inputs
             {
                 get
                 {
-                    return ImmutableHashSet<ItemKey>.Empty
+                    return ImmutableSortedSet<ItemKey>.Empty
                         .Add(owner)
-                        .Union(parent.parameters.Select(x => x.ParamType.GetReferences()).UnionAll())
-                        .Union(locals.Select(x => x.LocalType.GetReferences()).UnionAll())
-                        .Union(instructions.Select(x => x.References).UnionAll())
+                        .UnionAll(parent.parameters.Select(x => x.ParamType.GetReferences()))
+                        .UnionAll(locals.Select(x => x.LocalType.GetReferences()))
+                        .UnionAll(instructions.Select(x => x.References))
                         .Add(methodKey);
                 }
             }
 
-            public ImmutableHashSet<ItemKey> Outputs
+            public ImmutableSortedSet<ItemKey> Outputs
             {
                 get
                 {
-                    return ImmutableHashSet<ItemKey>.Empty;
+                    return ImmutableSortedSet<ItemKey>.Empty;
                 }
             }
 
-            public void Compile(ModuleBuilder mb, ImmutableDictionary<ItemKey, SaBox<object>> vars)
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
             {
-                TypeBuilder tb = (TypeBuilder)(vars[owner].Value);
+                //TypeBuilder tb = (TypeBuilder)(vars[owner].Value);
                 MethodBuilder meb = (MethodBuilder)(vars[methodKey].Value);
                 ILGenerator ilg = meb.GetILGenerator();
 

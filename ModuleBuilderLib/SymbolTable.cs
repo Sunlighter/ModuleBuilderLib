@@ -1,13 +1,292 @@
 ﻿using Sunlighter.OptionLib;
+using Sunlighter.TypeTraitsLib;
+using Sunlighter.TypeTraitsLib.Building;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Threading;
 
 namespace Sunlighter.ModuleBuilderLib
 {
+    [Record]
+    public sealed class MethodInfoProxy
+    {
+        private readonly Type declaringType;
+        private readonly string name;
+        private readonly bool isPublic;
+        private readonly bool isStatic;
+        private readonly ImmutableList<Type> parameterTypes;
+
+        public MethodInfoProxy
+        (
+            [Bind("$dt")] Type declaringType,
+            [Bind("$name")] string name,
+            [Bind("$isPublic")] bool isPublic,
+            [Bind("$isStatic")] bool isStatic,
+            [Bind("$parameterTypes")] ImmutableList<Type> parameterTypes
+        )
+        {
+            this.declaringType = declaringType;
+            this.name = name;
+            this.isPublic = isPublic;
+            this.isStatic = isStatic;
+            this.parameterTypes = parameterTypes;
+        }
+
+        [Bind("$dt")]
+        public Type DeclaringType => declaringType;
+
+        [Bind("$name")]
+        public string Name => name;
+
+        [Bind("$isPublic")]
+        public bool IsPublic => isPublic;
+
+        [Bind("$isStatic")]
+        public bool IsStatic => isStatic;
+
+        [Bind("$parameterTypes")]
+        public ImmutableList<Type> ParameterTypes => parameterTypes;
+
+        public static explicit operator MethodInfoProxy(MethodInfo m)
+        {
+            return new MethodInfoProxy
+            (
+                m.DeclaringType.AssertNotNull(),
+                m.Name,
+                m.IsPublic,
+                m.IsStatic,
+                m.GetParameters().Select(pi => pi.ParameterType).ToImmutableList()
+            );
+        }
+
+        public static explicit operator MethodInfo(MethodInfoProxy m)
+        {
+            BindingFlags f = 0;
+            if (m.IsPublic) f |= BindingFlags.Public; else f |= BindingFlags.NonPublic;
+            if (m.IsStatic) f |= BindingFlags.Static; else f |= BindingFlags.Instance;
+
+#if NETSTANDARD2_0 || NETSTANDARD2_1
+            MethodInfo mi = m.DeclaringType.GetRequiredMethod(m.Name, f, m.ParameterTypes.ToArray());
+#else
+            MethodInfo? mi = m.DeclaringType.GetRequiredMethod(m.Name, f, m.ParameterTypes.ToArray());
+#endif
+
+            if (mi == null) throw new Exception("Method not found");
+
+            return mi;
+        }
+    }
+
+    [Record]
+    public sealed class ConstructorInfoProxy
+    {
+        private readonly Type declaringType;
+        private readonly bool isPublic;
+        private readonly ImmutableList<Type> parameterTypes;
+
+        public ConstructorInfoProxy
+        (
+            [Bind("$dt")] Type declaringType,
+            [Bind("$isPublic")] bool isPublic,
+            [Bind("$parameterTypes")] ImmutableList<Type> parameterTypes
+        )
+        {
+            this.declaringType = declaringType;
+            this.isPublic = isPublic;
+            this.parameterTypes = parameterTypes;
+        }
+
+        [Bind("$dt")]
+        public Type DeclaringType => declaringType;
+
+        [Bind("$isPublic")]
+        public bool IsPublic => isPublic;
+
+        [Bind("$parameterTypes")]
+        public ImmutableList<Type> ParameterTypes => parameterTypes;
+
+        public static explicit operator ConstructorInfoProxy(ConstructorInfo c)
+        {
+            return new ConstructorInfoProxy
+            (
+                c.DeclaringType.AssertNotNull(),
+                c.IsPublic,
+                c.GetParameters().Select(pi => pi.ParameterType).ToImmutableList()
+            );
+        }
+
+        public static explicit operator ConstructorInfo(ConstructorInfoProxy c)
+        {
+            BindingFlags f = 0;
+            if (c.IsPublic) f |= BindingFlags.Public; else f |= BindingFlags.NonPublic;
+
+#if NETSTANDARD2_0 || NETSTANDARD2_1
+            ConstructorInfo ci = c.DeclaringType.GetConstructor(f, Type.DefaultBinder, c.ParameterTypes.ToArray(), null);
+#else
+            ConstructorInfo? ci = c.DeclaringType.GetConstructor(f, Type.DefaultBinder, c.ParameterTypes.ToArray(), null);
+#endif
+            if (ci == null) throw new Exception($"Constructor not found: {TypeTraitsUtility.GetTypeName(c.DeclaringType)}({string.Join(", ", c.ParameterTypes.Select(t => TypeTraitsUtility.GetTypeName(t)))})");
+
+            return ci;
+        }
+    }
+
+    [Record]
+    public sealed class FieldInfoProxy
+    {
+        private readonly Type declaringType;
+        private readonly string name;
+        private readonly bool isPublic;
+
+        public FieldInfoProxy
+        (
+            [Bind("$dt")] Type declaringType,
+            [Bind("$name")] string name,
+            [Bind("$isPublic")] bool isPublic
+        )
+        {
+            this.declaringType = declaringType;
+            this.name = name;
+            this.isPublic = isPublic;
+        }
+
+        [Bind("$dt")]
+        public Type DeclaringType => declaringType;
+
+        [Bind("$name")]
+        public string Name => name;
+
+        [Bind("$isPublic")]
+        public bool IsPublic => isPublic;
+
+        public static explicit operator FieldInfoProxy(FieldInfo f)
+        {
+            return new FieldInfoProxy
+            (
+                f.DeclaringType.AssertNotNull(),
+                f.Name,
+                f.IsPublic
+            );
+        }
+
+        public static explicit operator FieldInfo(FieldInfoProxy f)
+        {
+            BindingFlags bf = 0;
+            if (f.IsPublic) bf |= BindingFlags.Public; else bf |= BindingFlags.NonPublic;
+
+#if NETSTANDARD2_0
+            FieldInfo fi = f.DeclaringType.GetField(f.Name, bf);
+#else
+            FieldInfo? fi = f.DeclaringType.GetField(f.Name, bf);
+#endif
+
+            if (fi == null) throw new Exception($"Field not found: {TypeTraitsUtility.GetTypeName(f.DeclaringType)}.{f.Name}");
+
+            return fi;
+        }
+    }
+
+    public static class Tools
+    {
+        private class CompareWorkerCollection
+        {
+            private readonly ITypeTraits<ItemKey> itemKeyCompareWorker;
+            private readonly ITypeTraits<TypeReference> typeReferenceCompareWorker;
+            private readonly ITypeTraits<MethodReference> methodReferenceCompareWorker;
+            private readonly ITypeTraits<ConstructorReference> constructorReferenceCompareWorker;
+            private readonly ITypeTraits<FieldReference> fieldReferenceCompareWorker;
+
+            public CompareWorkerCollection
+            (
+                ITypeTraits<ItemKey> itemKeyCompareWorker,
+                ITypeTraits<TypeReference> typeReferenceCompareWorker,
+                ITypeTraits<MethodReference> methodReferenceCompareWorker,
+                ITypeTraits<ConstructorReference> constructorReferenceCompareWorker,
+                ITypeTraits<FieldReference> fieldReferenceCompareWorker
+            )
+            {
+                this.itemKeyCompareWorker = itemKeyCompareWorker;
+                this.typeReferenceCompareWorker = typeReferenceCompareWorker;
+                this.methodReferenceCompareWorker = methodReferenceCompareWorker;
+                this.constructorReferenceCompareWorker = constructorReferenceCompareWorker;
+                this.fieldReferenceCompareWorker = fieldReferenceCompareWorker;
+            }
+
+            public ITypeTraits<ItemKey> ItemKeyCompareWorker => itemKeyCompareWorker;
+            public ITypeTraits<TypeReference> TypeReferenceCompareWorker => typeReferenceCompareWorker;
+            public ITypeTraits<MethodReference> MethodReferenceCompareWorker => methodReferenceCompareWorker;
+            public ITypeTraits<ConstructorReference> ConstructorReferenceCompareWorker => constructorReferenceCompareWorker;
+            public ITypeTraits<FieldReference> FieldReferenceCompareWorker => fieldReferenceCompareWorker;
+        }
+
+        private static readonly Lazy<CompareWorkerCollection> compareWorkerCollection = new Lazy<CompareWorkerCollection>(GetCompareWorkerCollection, LazyThreadSafetyMode.ExecutionAndPublication);
+
+        private static CompareWorkerCollection GetCompareWorkerCollection()
+        {
+            Builder.Instance.AddTypeTraits<Symbol>(Symbol.TypeTraits);
+
+            ITypeTraits<MethodInfoProxy> mip_cw = Builder.Instance.GetTypeTraits<MethodInfoProxy>();
+
+            Builder.Instance.AddTypeTraits
+            (
+                new ConvertTypeTraits<MethodInfo, MethodInfoProxy>
+                (
+                    mi => (MethodInfoProxy)mi,
+                    mip_cw,
+                    mip => (MethodInfo)mip
+                )
+            );
+
+            ITypeTraits<ConstructorInfoProxy> cip_cw = Builder.Instance.GetTypeTraits<ConstructorInfoProxy>();
+
+            Builder.Instance.AddTypeTraits
+            (
+                new ConvertTypeTraits<ConstructorInfo, ConstructorInfoProxy>
+                (
+                    ci => (ConstructorInfoProxy)ci,
+                    cip_cw,
+                    cip => (ConstructorInfo)cip
+                )
+            );
+
+            ITypeTraits<FieldInfoProxy> fip_cw = Builder.Instance.GetTypeTraits<FieldInfoProxy>();
+
+            Builder.Instance.AddTypeTraits
+            (
+                new ConvertTypeTraits<FieldInfo, FieldInfoProxy>
+                (
+                    fi => (FieldInfoProxy)fi,
+                    fip_cw,
+                    fip => (FieldInfo)fip
+                )
+            );
+
+            return new CompareWorkerCollection
+            (
+                Builder.Instance.GetTypeTraits<ItemKey>(),
+                Builder.Instance.GetTypeTraits<TypeReference>(),
+                Builder.Instance.GetTypeTraits<MethodReference>(),
+                Builder.Instance.GetTypeTraits<ConstructorReference>(),
+                Builder.Instance.GetTypeTraits<FieldReference>()
+            );
+        }
+
+        public static ITypeTraits<ItemKey> ItemKeyCompareWorker => compareWorkerCollection.Value.ItemKeyCompareWorker;
+
+        public static ITypeTraits<TypeReference> TypeReferenceCompareWorker => compareWorkerCollection.Value.TypeReferenceCompareWorker;
+
+        public static ITypeTraits<MethodReference> MethodReferenceCompareWorker => compareWorkerCollection.Value.MethodReferenceCompareWorker;
+
+        public static ITypeTraits<ConstructorReference> ConstructorReferenceCompareWorker => compareWorkerCollection.Value.ConstructorReferenceCompareWorker;
+
+        public static ITypeTraits<FieldReference> FieldReferenceCompareWorker => compareWorkerCollection.Value.FieldReferenceCompareWorker;
+    }
+
+    [Obsolete]
     enum ItemHashDelimiters : byte
     {
         TypeKey = (byte)0x3A,
@@ -28,86 +307,96 @@ namespace Sunlighter.ModuleBuilderLib
         PropertyKey = (byte)0x39,
     }
 
-    public abstract class ItemKey : IEquatable<ItemKey>, IHashable
+    [UnionOfDescendants]
+    public abstract class ItemKey : IEquatable<ItemKey>, IComparable<ItemKey>
     {
-        public abstract bool Equals(ItemKey other);
-
-        public abstract void AddToHash(IHashGenerator hg);
-
-        public abstract override bool Equals(object obj);
-
-        public abstract override int GetHashCode();
-
-        public static bool operator ==(ItemKey a, ItemKey b)
-        {
-            if (object.ReferenceEquals(a, null) && object.ReferenceEquals(b, null)) return true;
-            if (object.ReferenceEquals(a, null) || object.ReferenceEquals(b, null)) return false;
-            return a.Equals(b);
-        }
-
-        public static bool operator !=(ItemKey a, ItemKey b)
-        {
-            if (object.ReferenceEquals(a, null) && object.ReferenceEquals(b, null)) return false;
-            if (object.ReferenceEquals(a, null) || object.ReferenceEquals(b, null)) return true;
-            return !(a.Equals(b));
-        }
-    }
-
-    public class TypeKey : ItemKey
-    {
-        private readonly Symbol name;
-
-        public TypeKey(Symbol name)
-        {
-            this.name = name;
-        }
-
-        public Symbol Name { get { return name; } }
-
+#if NETSTANDARD2_0
         public override bool Equals(object obj)
+#else
+        public override bool Equals(object? obj)
+#endif
         {
-            if (!(obj is TypeKey)) return false;
-            TypeKey tObj = (TypeKey)obj;
-            return this.name == tObj.name;
-        }
-
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.TypeKey);
-            name.AddToHash(hg);
-        }
-
-        public override bool Equals(ItemKey other)
-        {
-            if (!(other is TypeKey)) return false;
-            TypeKey tObj = (TypeKey)other;
-            return this.name == tObj.name;
+            if (obj is ItemKey ik)
+            {
+                return Tools.ItemKeyCompareWorker.Compare(this, ik) == 0;
+            }
+            else return false;
         }
 
         public override int GetHashCode()
         {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
+            return Tools.ItemKeyCompareWorker.GetBasicHashCode(this);
         }
 
         public override string ToString()
         {
-            return $"[ TypeKey {name} ]";
+            return Tools.ItemKeyCompareWorker.ToDebugString(this);
         }
 
-        public static bool operator ==(TypeKey a, TypeKey b)
+#if NETSTANDARD2_0
+        public bool Equals(ItemKey other)
+#else
+        public bool Equals(ItemKey? other)
+#endif
         {
-            return a.Equals(b);
+            if (other is null) return false;
+            return Tools.ItemKeyCompareWorker.Compare(this, other) == 0;
         }
 
-        public static bool operator !=(TypeKey a, TypeKey b)
+#if NETSTANDARD2_0
+        public int CompareTo(ItemKey other)
+#else
+        public int CompareTo(ItemKey? other)
+#endif
         {
-            return !(a.Equals(b));
+            if (other is null) return 1;
+            return Tools.ItemKeyCompareWorker.Compare(this, other);
         }
+
+#if NETSTANDARD2_0
+        public static bool operator ==(ItemKey a, ItemKey b)
+#else
+        public static bool operator ==(ItemKey? a, ItemKey? b)
+#endif
+        {
+            if (a is null && b is null) return true;
+            if (a is null || b is null) return false;
+            return Tools.ItemKeyCompareWorker.Compare(a, b) == 0;
+        }
+
+#if NETSTANDARD2_0
+        public static bool operator !=(ItemKey a, ItemKey b)
+#else
+        public static bool operator !=(ItemKey? a, ItemKey? b)
+#endif
+        {
+            if (a is null && b is null) return false;
+            if (a is null || b is null) return true;
+            return Tools.ItemKeyCompareWorker.Compare(a, b) != 0;
+        }
+
+        public static bool operator <(ItemKey a, ItemKey b) => Tools.ItemKeyCompareWorker.Compare(a, b) < 0;
+        public static bool operator >(ItemKey a, ItemKey b) => Tools.ItemKeyCompareWorker.Compare(a, b) > 0;
+        public static bool operator <=(ItemKey a, ItemKey b) => Tools.ItemKeyCompareWorker.Compare(a, b) <= 0;
+        public static bool operator >=(ItemKey a, ItemKey b) => Tools.ItemKeyCompareWorker.Compare(a, b) >= 0;
     }
 
-    public class CompletedTypeKey : ItemKey
+    [Record]
+    public class TypeKey : ItemKey
+    {
+        private readonly Symbol name;
+
+        public TypeKey([Bind("$name")] Symbol name)
+        {
+            this.name = name;
+        }
+
+        [Bind("$name")]
+        public Symbol Name => name;
+    }
+
+    [Record]
+    public sealed class CompletedTypeKey : ItemKey
     {
         private readonly Symbol name;
 
@@ -116,75 +405,84 @@ namespace Sunlighter.ModuleBuilderLib
             this.name = name;
         }
 
-        public Symbol Name { get { return name; } }
+        [Bind("name")]
+        public Symbol Name => name;
+    }
 
+    /// <summary>
+    /// Refers to a type whether it already exists, or still hasn't been built
+    /// </summary>
+    [UnionOfDescendants]
+    public abstract class TypeReference : IEquatable<TypeReference>, IComparable<TypeReference>
+    {
+#if NETSTANDARD2_0
         public override bool Equals(object obj)
+#else
+        public override bool Equals(object? obj)
+#endif
         {
-            if (!(obj is CompletedTypeKey)) return false;
-            CompletedTypeKey tObj = (CompletedTypeKey)obj;
-            return this.name == tObj.name;
-        }
-
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.CompletedTypeKey);
-            name.AddToHash(hg);
-        }
-
-        public override bool Equals(ItemKey other)
-        {
-            if (!(other is CompletedTypeKey)) return false;
-            CompletedTypeKey tObj = (CompletedTypeKey)other;
-            return this.name == tObj.name;
+            if (obj is TypeReference t)
+            {
+                return Tools.TypeReferenceCompareWorker.Compare(this, t) == 0;
+            }
+            else return false;
         }
 
         public override int GetHashCode()
         {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
+            return Tools.TypeReferenceCompareWorker.GetBasicHashCode(this);
         }
 
-        public override string ToString()
+#if NETSTANDARD2_0
+        public bool Equals(TypeReference other)
+#else
+        public bool Equals(TypeReference? other)
+#endif
         {
-            return $"[ CompletedTypeKey {name} ]";
+            if (other is null) return false;
+            return Tools.TypeReferenceCompareWorker.Compare(this, other) == 0;
         }
 
-        public static bool operator ==(CompletedTypeKey a, CompletedTypeKey b)
+#if NETSTANDARD2_0
+        public int CompareTo(TypeReference other)
+#else
+        public int CompareTo(TypeReference? other)
+#endif
         {
-            return a.Equals(b);
+            if (other is null) return 1;
+            return Tools.TypeReferenceCompareWorker.Compare(this, other);
         }
 
-        public static bool operator !=(CompletedTypeKey a, CompletedTypeKey b)
-        {
-            return !(a.Equals(b));
-        }
-    }
-
-#pragma warning disable 660, 661
-    public abstract class TypeReference : IEquatable<TypeReference>, IHashable
-    {
-        public abstract bool Equals(TypeReference other);
-
-        public abstract void AddToHash(IHashGenerator hg);
-
-        public abstract ImmutableHashSet<ItemKey> GetReferences();
-
-        public abstract Type Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references);
-
+#if NETSTANDARD2_0
         public static bool operator ==(TypeReference a, TypeReference b)
+#else
+        public static bool operator ==(TypeReference? a, TypeReference? b)
+#endif
         {
-            if (object.ReferenceEquals(a, null) && object.ReferenceEquals(b, null)) return true;
-            if (object.ReferenceEquals(a, null) || object.ReferenceEquals(b, null)) return false;
-            return a.Equals(b);
+            if (a is null && b is null) return true;
+            if (a is null || b is null) return false;
+            return Tools.TypeReferenceCompareWorker.Compare(a, b) == 0;
         }
 
+#if NETSTANDARD2_0
         public static bool operator !=(TypeReference a, TypeReference b)
+#else
+        public static bool operator !=(TypeReference? a, TypeReference? b)
+#endif
         {
-            if (object.ReferenceEquals(a, null) && object.ReferenceEquals(b, null)) return false;
-            if (object.ReferenceEquals(a, null) || object.ReferenceEquals(b, null)) return true;
-            return !(a.Equals(b));
+            if (a is null && b is null) return false;
+            if (a is null || b is null) return true;
+            return Tools.TypeReferenceCompareWorker.Compare(a, b) != 0;
         }
+
+        public static bool operator <(TypeReference a, TypeReference b) => Tools.TypeReferenceCompareWorker.Compare(a, b) < 0;
+        public static bool operator >(TypeReference a, TypeReference b) => Tools.TypeReferenceCompareWorker.Compare(a, b) > 0;
+        public static bool operator <=(TypeReference a, TypeReference b) => Tools.TypeReferenceCompareWorker.Compare(a, b) <= 0;
+        public static bool operator >=(TypeReference a, TypeReference b) => Tools.TypeReferenceCompareWorker.Compare(a, b) >= 0;
+
+        public abstract ImmutableSortedSet<ItemKey> GetReferences();
+
+        public abstract Type Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references);
 
         public static TypeReference GetActionType(ImmutableList<TypeReference> arguments)
         {
@@ -343,6 +641,7 @@ namespace Sunlighter.ModuleBuilderLib
             return et.TypeArguments[0];
         }
 #endif
+
         public abstract bool IsArray { get; }
 
         public abstract TypeReference GetElementType();
@@ -361,9 +660,9 @@ namespace Sunlighter.ModuleBuilderLib
 
         public static bool IsAssignable(SymbolTable s, TypeReference dest, TypeReference src)
         {
-            if (dest is ExistingTypeReference && src is ExistingTypeReference)
+            if (dest is ExistingTypeReference eDest && src is ExistingTypeReference eSrc)
             {
-                return ((ExistingTypeReference)dest).ExistingType.IsAssignableFrom(((ExistingTypeReference)src).ExistingType);
+                return eDest.ExistingType.IsAssignableFrom(eSrc.ExistingType);
             }
             else if (src is ExistingTypeReference)
             {
@@ -390,9 +689,9 @@ namespace Sunlighter.ModuleBuilderLib
             }
         }
     }
-#pragma warning restore 660, 661
 
-    public class TypeKeyReference : TypeReference
+    [Record]
+    public sealed class TypeKeyReference : TypeReference
     {
         private readonly TypeKey typeKey;
 
@@ -401,46 +700,15 @@ namespace Sunlighter.ModuleBuilderLib
             this.typeKey = typeKey;
         }
 
+        [Bind("typeKey")]
         public TypeKey TypeKey { get { return typeKey; } }
 
-        public override bool Equals(object obj)
+        public override ImmutableSortedSet<ItemKey> GetReferences()
         {
-            if (!(obj is TypeKeyReference)) return false;
-            TypeKeyReference tObj = (TypeKeyReference)obj;
-            return this.typeKey == tObj.typeKey;
+            return ImmutableSortedSet<ItemKey>.Empty.Add(typeKey);
         }
 
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.TypeKeyReference);
-            typeKey.AddToHash(hg);
-        }
-
-        public override bool Equals(TypeReference other)
-        {
-            if (!(other is TypeKeyReference)) return false;
-            TypeKeyReference tObj = (TypeKeyReference)other;
-            return this.typeKey == tObj.typeKey;
-        }
-
-        public override int GetHashCode()
-        {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override string ToString()
-        {
-            return $"[ TypeKeyReference {typeKey.Name} ]";
-        }
-
-        public override ImmutableHashSet<ItemKey> GetReferences()
-        {
-            return ImmutableHashSet<ItemKey>.Empty.Add(typeKey);
-        }
-
-        public override Type Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references)
+        public override Type Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references)
         {
             if (references.ContainsKey(typeKey))
             {
@@ -459,10 +727,7 @@ namespace Sunlighter.ModuleBuilderLib
             }
         }
 
-        public override bool IsDelegate
-        {
-            get { return false; }
-        }
+        public override bool IsDelegate => false;
 
         public override TypeReference[] GetDelegateParameterTypes()
         {
@@ -515,7 +780,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ExistingTypeReference : TypeReference
+    [Record]
+    public sealed class ExistingTypeReference : TypeReference
     {
         private readonly Type existingType;
 
@@ -524,51 +790,20 @@ namespace Sunlighter.ModuleBuilderLib
             this.existingType = existingType;
         }
 
-        public Type ExistingType { get { return existingType; } }
+        [Bind("existingType")]
+        public Type ExistingType => existingType;
 
-        public override bool Equals(object obj)
+        public override ImmutableSortedSet<ItemKey> GetReferences()
         {
-            if (!(obj is ExistingTypeReference)) return false;
-            ExistingTypeReference tObj = (ExistingTypeReference)obj;
-            return this.existingType == tObj.existingType;
+            return ImmutableSortedSet<ItemKey>.Empty;
         }
 
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.ExistingTypeReference);
-            hg.Add(existingType);
-        }
-
-        public override bool Equals(TypeReference other)
-        {
-            if (!(other is ExistingTypeReference)) return false;
-            ExistingTypeReference tObj = (ExistingTypeReference)other;
-            return this.existingType == tObj.existingType;
-        }
-
-        public override int GetHashCode()
-        {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override string ToString()
-        {
-            return $"[ ExistingTypeReference {existingType} ]";
-        }
-
-        public override ImmutableHashSet<ItemKey> GetReferences()
-        {
-            return ImmutableHashSet<ItemKey>.Empty;
-        }
-
-        public override Type Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references)
+        public override Type Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references)
         {
             return existingType;
         }
 
-#region Constants
+        #region Constants
 
         private static readonly Lazy<ExistingTypeReference> theVoid = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(void)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Void { get { return theVoid.Value; } }
@@ -624,7 +859,7 @@ namespace Sunlighter.ModuleBuilderLib
         private static readonly Lazy<ExistingTypeReference> theType = new Lazy<ExistingTypeReference>(() => new ExistingTypeReference(typeof(Type)), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         public static ExistingTypeReference Type { get { return theType.Value; } }
 
-#endregion
+        #endregion
 
         public override bool IsDelegate
         {
@@ -634,14 +869,14 @@ namespace Sunlighter.ModuleBuilderLib
         public override TypeReference[] GetDelegateParameterTypes()
         {
             if (!(existingType.IsSubclassOf(typeof(Delegate)))) throw new InvalidOperationException("Not a delegate");
-            MethodInfo mi = existingType.GetMethod("Invoke");
+            MethodInfo mi = existingType.GetMethod("Invoke").AssertNotNull();
             return mi.GetParameters().Select(x => new ExistingTypeReference(x.ParameterType)).ToArray();
         }
 
         public override TypeReference GetDelegateReturnType()
         {
             if (!(existingType.IsSubclassOf(typeof(Delegate)))) throw new InvalidOperationException("Not a delegate");
-            MethodInfo mi = existingType.GetMethod("Invoke");
+            MethodInfo mi = existingType.GetMethod("Invoke").AssertNotNull();
             return new ExistingTypeReference(mi.ReturnType);
         }
 
@@ -654,7 +889,7 @@ namespace Sunlighter.ModuleBuilderLib
         {
             if (existingType.IsArray)
             {
-                return new ExistingTypeReference(existingType.GetElementType());
+                return new ExistingTypeReference(existingType.GetElementType().AssertNotNull());
             }
             else
             {
@@ -681,7 +916,7 @@ namespace Sunlighter.ModuleBuilderLib
         {
             if (existingType.IsClass)
             {
-                return Option<TypeReference>.Some(new ExistingTypeReference(existingType.BaseType));
+                return Option<TypeReference>.Some(new ExistingTypeReference(existingType.BaseType.AssertNotNull()));
             }
             else
             {
@@ -696,11 +931,12 @@ namespace Sunlighter.ModuleBuilderLib
 
         public override string FullName
         {
-            get { return existingType.FullName; }
+            get { return existingType.FullNameNotNull(); }
         }
     }
 
-    public class ExistingGenericTypeReference : TypeReference
+    [Record]
+    public sealed class ExistingGenericTypeReference : TypeReference
     {
         private readonly Type openGenericType;
         private readonly ImmutableList<TypeReference> typeArguments;
@@ -711,66 +947,18 @@ namespace Sunlighter.ModuleBuilderLib
             this.typeArguments = typeArguments;
         }
 
-        public Type OpenGenericType { get { return openGenericType; } }
+        [Bind("openGenericType")]
+        public Type OpenGenericType => openGenericType;
 
-        public ImmutableList<TypeReference> TypeArguments { get { return typeArguments; } }
+        [Bind("typeArguments")]
+        public ImmutableList<TypeReference> TypeArguments => typeArguments;
 
-        public override bool Equals(object obj)
+        public override ImmutableSortedSet<ItemKey> GetReferences()
         {
-            if (!(obj is ExistingGenericTypeReference)) return false;
-            ExistingGenericTypeReference eObj = (ExistingGenericTypeReference)obj;
-            if (openGenericType != eObj.openGenericType) return false;
-            if (typeArguments.Count != eObj.typeArguments.Count) return false;
-            int iEnd = typeArguments.Count;
-            for (int i = 0; i < iEnd; ++i)
-            {
-                if (typeArguments[i] != eObj.typeArguments[i]) return false;
-            }
-            return true;
+            return ImmutableSortedSet<ItemKey>.Empty.UnionAll(typeArguments.Select(x => x.GetReferences()));
         }
 
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.ExistingGenericTypeReference);
-            hg.Add(openGenericType);
-            foreach (TypeReference typeArgument in typeArguments)
-            {
-                typeArgument.AddToHash(hg);
-            }
-        }
-
-        public override bool Equals(TypeReference other)
-        {
-            if (!(other is ExistingGenericTypeReference)) return false;
-            ExistingGenericTypeReference eObj = (ExistingGenericTypeReference)other;
-            if (openGenericType != eObj.openGenericType) return false;
-            if (typeArguments.Count != eObj.typeArguments.Count) return false;
-            int iEnd = typeArguments.Count;
-            for (int i = 0; i < iEnd; ++i)
-            {
-                if (typeArguments[i] != eObj.typeArguments[i]) return false;
-            }
-            return true;
-        }
-
-        public override int GetHashCode()
-        {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override string ToString()
-        {
-            return $"[ ExistingGenericTypeReference, openGenericType = {openGenericType.FullName}, typeArguments = #({typeArguments.Select(x => x.ToString()).Concatenate(" ")}) ]";
-        }
-
-        public override ImmutableHashSet<ItemKey> GetReferences()
-        {
-            return typeArguments.Select(x => x.GetReferences()).UnionAll();
-        }
-
-        public override Type Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references)
+        public override Type Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references)
         {
             Type[] ts = typeArguments.Select(x => x.Resolve(references)).ToArray();
             return openGenericType.MakeGenericType(ts);
@@ -784,7 +972,7 @@ namespace Sunlighter.ModuleBuilderLib
         public override TypeReference[] GetDelegateParameterTypes()
         {
             if (!(openGenericType.IsSubclassOf(typeof(Delegate)))) throw new InvalidOperationException("Not a delegate");
-            MethodInfo mi = openGenericType.GetMethod("Invoke");
+            MethodInfo mi = openGenericType.GetMethod("Invoke").AssertNotNull();
             Type[] genericParameters = openGenericType.GetGenericArguments();
             Func<Type, TypeReference> subst = delegate (Type t)
             {
@@ -802,7 +990,7 @@ namespace Sunlighter.ModuleBuilderLib
         public override TypeReference GetDelegateReturnType()
         {
             if (!(openGenericType.IsSubclassOf(typeof(Delegate)))) throw new InvalidOperationException("Not a delegate");
-            MethodInfo mi = openGenericType.GetMethod("Invoke");
+            MethodInfo mi = openGenericType.GetMethod("Invoke").AssertNotNull();
             Type[] genericParameters = openGenericType.GetGenericArguments();
             Func<Type, TypeReference> subst = delegate (Type t)
             {
@@ -849,7 +1037,7 @@ namespace Sunlighter.ModuleBuilderLib
             }
             else
             {
-                return Option<TypeReference>.Some(new ExistingTypeReference(openGenericType.BaseType));
+                return Option<TypeReference>.Some(new ExistingTypeReference(openGenericType.BaseType.AssertNotNull()));
             }
         }
 
@@ -860,11 +1048,12 @@ namespace Sunlighter.ModuleBuilderLib
 
         public override string FullName
         {
-            get { return openGenericType.FullName; }
+            get { return openGenericType.FullNameNotNull(); }
         }
     }
 
-    public class ArrayTypeReference : TypeReference
+    [Record]
+    public sealed class ArrayTypeReference : TypeReference
     {
         private readonly TypeReference elementType;
 
@@ -873,46 +1062,15 @@ namespace Sunlighter.ModuleBuilderLib
             this.elementType = elementType;
         }
 
-        public override bool Equals(object obj)
-        {
-            if (!(obj is ArrayTypeReference)) return false;
-            ArrayTypeReference aObj = (ArrayTypeReference)obj;
-            if (elementType != aObj.elementType) return false;
-            return true;
-        }
+        [Bind("elementType")]
+        public TypeReference ElementType => elementType;
 
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.ArrayTypeReference);
-            elementType.AddToHash(hg);
-        }
-
-        public override bool Equals(TypeReference other)
-        {
-            if (!(other is ArrayTypeReference)) return false;
-            ArrayTypeReference aObj = (ArrayTypeReference)other;
-            if (elementType != aObj.elementType) return false;
-            return true;
-        }
-
-        public override int GetHashCode()
-        {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override string ToString()
-        {
-            return "[ ArrayTypeReference, elementType = " + elementType.ToString() + " ]";
-        }
-
-        public override ImmutableHashSet<ItemKey> GetReferences()
+        public override ImmutableSortedSet<ItemKey> GetReferences()
         {
             return elementType.GetReferences();
         }
 
-        public override Type Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references)
+        public override Type Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references)
         {
             Type eType = elementType.Resolve(references);
             return eType.MakeArrayType();
@@ -974,7 +1132,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class MethodKey : ItemKey
+    [Record]
+    public sealed class MethodKey : ItemKey
     {
         private readonly TypeKey owner;
         private readonly Symbol name;
@@ -989,109 +1148,105 @@ namespace Sunlighter.ModuleBuilderLib
             this.parameters = parameters;
         }
 
+        [Bind("owner")]
         public TypeKey Owner { get { return owner; } }
 
+        [Bind("name")]
         public Symbol Name { get { return name; } }
 
+        [Bind("isInstance")]
         public bool IsInstance { get { return isInstance; } }
 
+        [Bind("parameters")]
         public ImmutableList<TypeReference> Parameters { get { return parameters; } }
-
-        public override bool Equals(object obj)
-        {
-            if (!(obj is MethodKey)) return false;
-            MethodKey mObj = (MethodKey)obj;
-            if (owner != mObj.owner) return false;
-            if (name != mObj.name) return false;
-            if (isInstance != mObj.isInstance) return false;
-            if (parameters.Count != mObj.parameters.Count) return false;
-            int iEnd = parameters.Count;
-            for (int i = 0; i < iEnd; ++i)
-            {
-                if (parameters[i] != mObj.parameters[i]) return false;
-            }
-            return true;
-        }
-
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.MethodKey);
-            owner.AddToHash(hg);
-            name.AddToHash(hg);
-            hg.Add(BitConverter.GetBytes(isInstance));
-            foreach (TypeReference t in parameters)
-            {
-                t.AddToHash(hg);
-            }
-        }
-
-        public override bool Equals(ItemKey other)
-        {
-            if (!(other is MethodKey)) return false;
-            MethodKey mObj = (MethodKey)other;
-            if (owner != mObj.owner) return false;
-            if (name != mObj.name) return false;
-            if (isInstance != mObj.isInstance) return false;
-            if (parameters.Count != mObj.parameters.Count) return false;
-            int iEnd = parameters.Count;
-            for (int i = 0; i < iEnd; ++i)
-            {
-                if (parameters[i] != mObj.parameters[i]) return false;
-            }
-            return true;
-        }
-
-        public override int GetHashCode()
-        {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override string ToString()
-        {
-            return "[ MethodKey owner = " + owner.ToString() +
-                ", name = " + name +
-                ", isInstance = " + isInstance +
-                ", parameters = #(" + parameters.Select(x => x.ToString()).Concatenate(" ") + ")" +
-                " ]";
-        }
     }
 
-#pragma warning disable 660, 661
-    public abstract class MethodReference : IEquatable<MethodReference>, IHashable
+    [UnionOfDescendants]
+    public abstract class MethodReference : IEquatable<MethodReference>, IComparable<MethodReference>
     {
-        public abstract bool Equals(MethodReference other);
+        public abstract ImmutableSortedSet<ItemKey> GetReferences();
 
-        public abstract void AddToHash(IHashGenerator hg);
-
-        public abstract ImmutableHashSet<ItemKey> GetReferences();
-
-        public abstract MethodInfo Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references);
-
-        public static bool operator ==(MethodReference a, MethodReference b)
-        {
-            if (object.ReferenceEquals(a, null) && object.ReferenceEquals(b, null)) return true;
-            if (object.ReferenceEquals(a, null) || object.ReferenceEquals(b, null)) return false;
-            return a.Equals(b);
-        }
-
-        public static bool operator !=(MethodReference a, MethodReference b)
-        {
-            if (object.ReferenceEquals(a, null) && object.ReferenceEquals(b, null)) return false;
-            if (object.ReferenceEquals(a, null) || object.ReferenceEquals(b, null)) return true;
-            return !(a.Equals(b));
-        }
+        public abstract MethodInfo Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references);
 
         public abstract int ParameterCount { get; }
 
         public abstract TypeReference GetParameterType(int index);
 
         public abstract TypeReference GetReturnType(SymbolTable s);
-    }
-#pragma warning restore 660, 661
 
-    public class MethodKeyReference : MethodReference
+#if NETSTANDARD2_0
+        public override bool Equals(object obj)
+#else
+        public override bool Equals(object? obj)
+#endif
+        {
+            if (obj is MethodReference mr)
+            {
+                return Tools.MethodReferenceCompareWorker.Compare(this, mr) == 0;
+            }
+            else return false;
+        }
+
+        public override int GetHashCode()
+        {
+            return Tools.MethodReferenceCompareWorker.GetBasicHashCode(this);
+        }
+
+        public override string ToString()
+        {
+            return Tools.MethodReferenceCompareWorker.ToDebugString(this);
+        }
+
+#if NETSTANDARD2_0
+        public bool Equals(MethodReference other)
+#else
+        public bool Equals(MethodReference? other)
+#endif
+        {
+            if (other is null) return false;
+            return Tools.MethodReferenceCompareWorker.Compare(this, other) == 0;
+        }
+
+#if NETSTANDARD2_0
+        public int CompareTo(MethodReference other)
+#else
+        public int CompareTo(MethodReference? other)
+#endif
+        {
+            if (other is null) return 1;
+            return Tools.MethodReferenceCompareWorker.Compare(this, other);
+        }
+
+#if NETSTANDARD2_0
+        public static bool operator ==(MethodReference a, MethodReference b)
+#else
+        public static bool operator ==(MethodReference? a, MethodReference? b)
+#endif
+        {
+            if (a is null && b is null) return true;
+            if (a is null || b is null) return false;
+            return Tools.MethodReferenceCompareWorker.Compare(a, b) == 0;
+        }
+
+#if NETSTANDARD2_0
+        public static bool operator !=(MethodReference a, MethodReference b)
+#else
+        public static bool operator !=(MethodReference? a, MethodReference? b)
+#endif
+        {
+            if (a is null && b is null) return false;
+            if (a is null || b is null) return true;
+            return Tools.MethodReferenceCompareWorker.Compare(a, b) != 0;
+        }
+
+        public static bool operator <(MethodReference a, MethodReference b) => Tools.MethodReferenceCompareWorker.Compare(a, b) < 0;
+        public static bool operator >(MethodReference a, MethodReference b) => Tools.MethodReferenceCompareWorker.Compare(a, b) > 0;
+        public static bool operator <=(MethodReference a, MethodReference b) => Tools.MethodReferenceCompareWorker.Compare(a, b) <= 0;
+        public static bool operator >=(MethodReference a, MethodReference b) => Tools.MethodReferenceCompareWorker.Compare(a, b) >= 0;
+    }
+
+    [Record]
+    public sealed class MethodKeyReference : MethodReference
     {
         private readonly MethodKey methodKey;
 
@@ -1099,47 +1254,18 @@ namespace Sunlighter.ModuleBuilderLib
         {
             this.methodKey = methodKey;
         }
+        
+        [Bind("methodKey")]
+        public MethodKey MethodKey => methodKey;
 
-        public override bool Equals(object obj)
+        public override ImmutableSortedSet<ItemKey> GetReferences()
         {
-            if (!(obj is MethodKeyReference)) return false;
-            MethodKeyReference mObj = (MethodKeyReference)obj;
-            return methodKey == mObj.methodKey;
+            return ImmutableSortedSet<ItemKey>.Empty.Add(methodKey);
         }
 
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.MethodKeyReference);
-            methodKey.AddToHash(hg);
-        }
-
-        public override bool Equals(MethodReference other)
-        {
-            if (!(other is MethodKeyReference)) return false;
-            MethodKeyReference mObj = (MethodKeyReference)other;
-            return methodKey == mObj.methodKey;
-        }
-
-        public override int GetHashCode()
-        {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override ImmutableHashSet<ItemKey> GetReferences()
-        {
-            return ImmutableHashSet<ItemKey>.Empty.Add(methodKey);
-        }
-
-        public override MethodInfo Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references)
+        public override MethodInfo Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references)
         {
             return (MethodInfo)(references[methodKey].Value);
-        }
-
-        public override string ToString()
-        {
-            return "[MethodKeyInfo]";
         }
 
         public override int ParameterCount
@@ -1166,7 +1292,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ExistingMethodReference : MethodReference
+    [Record]
+    public sealed class ExistingMethodReference : MethodReference
     {
         private readonly MethodInfo methodInfo;
 
@@ -1175,50 +1302,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.methodInfo = methodInfo;
         }
 
-        public MethodInfo ExistingMethod { get { return ExistingMethod; } }
+        [Bind("methodInfo")]
+        public MethodInfo ExistingMethod => methodInfo;
 
-        public override bool Equals(object obj)
+        public override ImmutableSortedSet<ItemKey> GetReferences()
         {
-            if (!(obj is ExistingMethodReference)) return false;
-            ExistingMethodReference eObj = (ExistingMethodReference)obj;
-            if (eObj.methodInfo != methodInfo) return false;
-            return true;
+            return ImmutableSortedSet<ItemKey>.Empty;
         }
 
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.ExistingMethodReference);
-            hg.Add(methodInfo);
-        }
-
-        public override bool Equals(MethodReference other)
-        {
-            if (!(other is ExistingMethodReference)) return false;
-            ExistingMethodReference eObj = (ExistingMethodReference)other;
-            if (eObj.methodInfo != methodInfo) return false;
-            return true;
-        }
-
-        public override int GetHashCode()
-        {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override ImmutableHashSet<ItemKey> GetReferences()
-        {
-            return ImmutableHashSet<ItemKey>.Empty;
-        }
-
-        public override MethodInfo Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references)
+        public override MethodInfo Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references)
         {
             return methodInfo;
-        }
-
-        public override string ToString()
-        {
-            return "[ExistingMethodInfo]";
         }
 
         public override int ParameterCount
@@ -1245,6 +1339,7 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
+    [Record]
     public class ConstructorKey : ItemKey
     {
         private readonly TypeKey owner;
@@ -1256,86 +1351,84 @@ namespace Sunlighter.ModuleBuilderLib
             this.parameters = parameters;
         }
 
-        public TypeKey Owner { get { return owner; } }
+        [Bind("owner")]
+        public TypeKey Owner => owner;
 
-        public ImmutableList<TypeReference> Parameters { get { return parameters; } }
+        [Bind("parameters")]
+        public ImmutableList<TypeReference> Parameters => parameters;
+    }
 
+    [UnionOfDescendants]
+    public abstract class ConstructorReference : IEquatable<ConstructorReference>, IComparable<ConstructorReference>
+    {
+#if NETSTANDARD2_0
         public override bool Equals(object obj)
+#else
+        public override bool Equals(object? obj)
+#endif
         {
-            if (!(obj is ConstructorKey)) return false;
-            ConstructorKey cObj = (ConstructorKey)obj;
-            if (owner != cObj.owner) return false;
-            if (parameters.Count != cObj.parameters.Count) return false;
-            int iEnd = parameters.Count;
-            for (int i = 0; i < iEnd; ++i)
+            if (obj is ConstructorReference ik)
             {
-                if (parameters[i] != cObj.parameters[i]) return false;
+                return Tools.ConstructorReferenceCompareWorker.Compare(this, ik) == 0;
             }
-            return true;
-        }
-
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.ConstructorKey);
-            owner.AddToHash(hg);
-            foreach (TypeReference t in parameters)
-            {
-                t.AddToHash(hg);
-            }
-        }
-
-        public override bool Equals(ItemKey other)
-        {
-            if (!(other is ConstructorKey)) return false;
-            ConstructorKey cObj = (ConstructorKey)other;
-            if (owner != cObj.owner) return false;
-            if (parameters.Count != cObj.parameters.Count) return false;
-            int iEnd = parameters.Count;
-            for (int i = 0; i < iEnd; ++i)
-            {
-                if (parameters[i] != cObj.parameters[i]) return false;
-            }
-            return true;
+            else return false;
         }
 
         public override int GetHashCode()
         {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
+            return Tools.ConstructorReferenceCompareWorker.GetBasicHashCode(this);
         }
 
-        public override string ToString()
+#if NETSTANDARD2_0
+        public bool Equals(ConstructorReference other)
+#else
+        public bool Equals(ConstructorReference? other)
+#endif
         {
-            return "[ ConstructorKey owner = " + owner.ToString() +
-                ", parameters = #(" + parameters.Select(x => x.ToString()).Concatenate(" ") + ") ]";
+            if (other is null) return false;
+            return Tools.ConstructorReferenceCompareWorker.Compare(this, other) == 0;
         }
-    }
 
-#pragma warning disable 660, 661
-    public abstract class ConstructorReference : IEquatable<ConstructorReference>, IHashable
-    {
-        public abstract bool Equals(ConstructorReference other);
+#if NETSTANDARD2_0
+        public int CompareTo(ConstructorReference other)
+#else
+        public int CompareTo(ConstructorReference? other)
+#endif
+        {
+            if (other is null) return 1;
+            return Tools.ConstructorReferenceCompareWorker.Compare(this, other);
+        }
 
-        public abstract void AddToHash(IHashGenerator hg);
-
-        public abstract ImmutableHashSet<ItemKey> GetReferences();
-
-        public abstract ConstructorInfo Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references);
-
+#if NETSTANDARD2_0
         public static bool operator ==(ConstructorReference a, ConstructorReference b)
+#else
+        public static bool operator ==(ConstructorReference? a, ConstructorReference? b)
+#endif
         {
-            if (object.ReferenceEquals(a, null) && object.ReferenceEquals(b, null)) return true;
-            if (object.ReferenceEquals(a, null) || object.ReferenceEquals(b, null)) return false;
-            return a.Equals(b);
+            if (a is null && b is null) return true;
+            if (a is null || b is null) return false;
+            return Tools.ConstructorReferenceCompareWorker.Compare(a, b) == 0;
         }
 
+#if NETSTANDARD2_0
         public static bool operator !=(ConstructorReference a, ConstructorReference b)
+#else
+        public static bool operator !=(ConstructorReference? a, ConstructorReference? b)
+#endif
         {
-            if (object.ReferenceEquals(a, null) && object.ReferenceEquals(b, null)) return false;
-            if (object.ReferenceEquals(a, null) || object.ReferenceEquals(b, null)) return true;
-            return !(a.Equals(b));
+            if (a is null && b is null) return false;
+            if (a is null || b is null) return true;
+            return Tools.ConstructorReferenceCompareWorker.Compare(a, b) != 0;
         }
+
+        public static bool operator <(ConstructorReference a, ConstructorReference b) => Tools.ConstructorReferenceCompareWorker.Compare(a, b) < 0;
+        public static bool operator >(ConstructorReference a, ConstructorReference b) => Tools.ConstructorReferenceCompareWorker.Compare(a, b) > 0;
+        public static bool operator <=(ConstructorReference a, ConstructorReference b) => Tools.ConstructorReferenceCompareWorker.Compare(a, b) <= 0;
+        public static bool operator >=(ConstructorReference a, ConstructorReference b) => Tools.ConstructorReferenceCompareWorker.Compare(a, b) >= 0;
+
+        public abstract ImmutableSortedSet<ItemKey> GetReferences();
+
+        public abstract ConstructorInfo Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references);
 
         public abstract int ParameterCount { get; }
 
@@ -1343,9 +1436,9 @@ namespace Sunlighter.ModuleBuilderLib
 
         public abstract TypeReference ConstructorOfWhat { get; }
     }
-#pragma warning restore 660, 661
 
-    public class ConstructorKeyReference : ConstructorReference
+    [Record]
+    public sealed class ConstructorKeyReference : ConstructorReference
     {
         private readonly ConstructorKey constructorKey;
 
@@ -1354,39 +1447,15 @@ namespace Sunlighter.ModuleBuilderLib
             this.constructorKey = constructorKey;
         }
 
-        public override bool Equals(object obj)
+        [Bind("constructorKey")]
+        public ConstructorKey ConstructorKey => constructorKey;
+
+        public override ImmutableSortedSet<ItemKey> GetReferences()
         {
-            if (!(obj is ConstructorKeyReference)) return false;
-            ConstructorKeyReference cObj = (ConstructorKeyReference)obj;
-            return constructorKey == cObj.constructorKey;
+            return ImmutableSortedSet<ItemKey>.Empty.Add(constructorKey);
         }
 
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.ConstructorKeyReference);
-            constructorKey.AddToHash(hg);
-        }
-
-        public override bool Equals(ConstructorReference other)
-        {
-            if (!(other is ConstructorKeyReference)) return false;
-            ConstructorKeyReference cObj = (ConstructorKeyReference)other;
-            return constructorKey == cObj.constructorKey;
-        }
-
-        public override int GetHashCode()
-        {
-            IHashGenerator hg = new HashGenerator();
-            AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override ImmutableHashSet<ItemKey> GetReferences()
-        {
-            return ImmutableHashSet<ItemKey>.Empty.Add(constructorKey);
-        }
-
-        public override ConstructorInfo Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references)
+        public override ConstructorInfo Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references)
         {
             return (ConstructorInfo)(references[constructorKey].Value);
         }
@@ -1412,7 +1481,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ExistingConstructorReference : ConstructorReference
+    [Record]
+    public sealed class ExistingConstructorReference : ConstructorReference
     {
         private readonly ConstructorInfo constructorInfo;
 
@@ -1421,39 +1491,15 @@ namespace Sunlighter.ModuleBuilderLib
             this.constructorInfo = constructorInfo;
         }
 
-        public override bool Equals(object obj)
+        [Bind("constructorInfo")]
+        public ConstructorInfo ConstructorInfo => constructorInfo;
+
+        public override ImmutableSortedSet<ItemKey> GetReferences()
         {
-            if (!(obj is ExistingConstructorReference)) return false;
-            ExistingConstructorReference eObj = (ExistingConstructorReference)obj;
-            return constructorInfo == eObj.constructorInfo;
+            return ImmutableSortedSet<ItemKey>.Empty;
         }
 
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.ExistingConstructorReference);
-            hg.Add(constructorInfo);
-        }
-
-        public override bool Equals(ConstructorReference other)
-        {
-            if (!(other is ExistingConstructorReference)) return false;
-            ExistingConstructorReference eObj = (ExistingConstructorReference)other;
-            return constructorInfo == eObj.constructorInfo;
-        }
-
-        public override int GetHashCode()
-        {
-            IHashGenerator hg = new HashGenerator();
-            AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override ImmutableHashSet<ItemKey> GetReferences()
-        {
-            return ImmutableHashSet<ItemKey>.Empty;
-        }
-
-        public override ConstructorInfo Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references)
+        public override ConstructorInfo Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references)
         {
             return constructorInfo;
         }
@@ -1475,11 +1521,12 @@ namespace Sunlighter.ModuleBuilderLib
 
         public override TypeReference ConstructorOfWhat
         {
-            get { return new ExistingTypeReference(constructorInfo.DeclaringType); }
+            get { return new ExistingTypeReference(constructorInfo.DeclaringType.AssertNotNull()); }
         }
     }
 
-    public class FieldKey : ItemKey
+    [Record]
+    public sealed class FieldKey : ItemKey
     {
         private readonly TypeKey owner;
         private readonly Symbol name;
@@ -1492,87 +1539,100 @@ namespace Sunlighter.ModuleBuilderLib
             this.fieldType = fieldType;
         }
 
+        [Bind("owner")]
         public TypeKey Owner { get { return owner; } }
 
+        [Bind("name")]
         public Symbol Name { get { return name; } }
 
+        [Bind("fieldType")]
         public TypeReference FieldType { get { return fieldType; } }
+    }
 
+    [UnionOfDescendants]
+    public abstract class FieldReference : IEquatable<FieldReference>, IComparable<FieldReference>
+    {
+#if NETSTANDARD2_0
         public override bool Equals(object obj)
+#else
+        public override bool Equals(object? obj)
+#endif
         {
-            if (!(obj is FieldKey)) return false;
-            FieldKey fObj = (FieldKey)obj;
-            if (owner != fObj.owner) return false;
-            if (name != fObj.name) return false;
-            if (fieldType != fObj.fieldType) return false;
-            return true;
-        }
-
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.FieldKey);
-            owner.AddToHash(hg);
-            name.AddToHash(hg);
-            fieldType.AddToHash(hg);
-        }
-
-        public override bool Equals(ItemKey other)
-        {
-            if (!(other is FieldKey)) return false;
-            FieldKey fObj = (FieldKey)other;
-            if (owner != fObj.owner) return false;
-            if (name != fObj.name) return false;
-            if (fieldType != fObj.fieldType) return false;
-            return true;
+            if (obj is FieldReference ik)
+            {
+                return Tools.FieldReferenceCompareWorker.Compare(this, ik) == 0;
+            }
+            else return false;
         }
 
         public override int GetHashCode()
         {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
+            return Tools.FieldReferenceCompareWorker.GetBasicHashCode(this);
         }
 
         public override string ToString()
         {
-            return "[ FieldKey owner = " + owner.ToString() +
-                ", name = " + name +
-                ", fieldType = " + fieldType.ToString() + " ]";
+            return Tools.FieldReferenceCompareWorker.ToDebugString(this);
         }
-    }
 
-#pragma warning disable 660, 661
-    public abstract class FieldReference : IEquatable<FieldReference>, IHashable
-    {
-        public abstract bool Equals(FieldReference other);
+#if NETSTANDARD2_0
+        public bool Equals(FieldReference other)
+#else
+        public bool Equals(FieldReference? other)
+#endif
+        {
+            if (other is null) return false;
+            return Tools.FieldReferenceCompareWorker.Compare(this, other) == 0;
+        }
 
-        public abstract void AddToHash(IHashGenerator hg);
+#if NETSTANDARD2_0
+        public int CompareTo(FieldReference other)
+#else
+        public int CompareTo(FieldReference? other)
+#endif
+        {
+            if (other is null) return 1;
+            return Tools.FieldReferenceCompareWorker.Compare(this, other);
+        }
 
-        public abstract ImmutableHashSet<ItemKey> GetReferences();
-
-        public abstract FieldInfo Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references);
-
+#if NETSTANDARD2_0
         public static bool operator ==(FieldReference a, FieldReference b)
+#else
+        public static bool operator ==(FieldReference? a, FieldReference? b)
+#endif
         {
-            if (object.ReferenceEquals(a, null) && object.ReferenceEquals(b, null)) return true;
-            if (object.ReferenceEquals(a, null) || object.ReferenceEquals(b, null)) return false;
-            return a.Equals(b);
+            if (a is null && b is null) return true;
+            if (a is null || b is null) return false;
+            return Tools.FieldReferenceCompareWorker.Compare(a, b) == 0;
         }
 
+#if NETSTANDARD2_0
         public static bool operator !=(FieldReference a, FieldReference b)
+#else
+        public static bool operator !=(FieldReference? a, FieldReference? b)
+#endif
         {
-            if (object.ReferenceEquals(a, null) && object.ReferenceEquals(b, null)) return false;
-            if (object.ReferenceEquals(a, null) || object.ReferenceEquals(b, null)) return true;
-            return !(a.Equals(b));
+            if (a is null && b is null) return false;
+            if (a is null || b is null) return true;
+            return Tools.FieldReferenceCompareWorker.Compare(a, b) != 0;
         }
+
+        public static bool operator <(FieldReference a, FieldReference b) => Tools.FieldReferenceCompareWorker.Compare(a, b) < 0;
+        public static bool operator >(FieldReference a, FieldReference b) => Tools.FieldReferenceCompareWorker.Compare(a, b) > 0;
+        public static bool operator <=(FieldReference a, FieldReference b) => Tools.FieldReferenceCompareWorker.Compare(a, b) <= 0;
+        public static bool operator >=(FieldReference a, FieldReference b) => Tools.FieldReferenceCompareWorker.Compare(a, b) >= 0;
+
+        public abstract ImmutableSortedSet<ItemKey> GetReferences();
+
+        public abstract FieldInfo Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references);
 
         public abstract TypeReference Owner { get; }
 
         public abstract TypeReference FieldType { get; }
     }
-#pragma warning restore 660, 661
 
-    public class FieldKeyReference : FieldReference
+    [Record]
+    public sealed class FieldKeyReference : FieldReference
     {
         private readonly FieldKey fieldKey;
 
@@ -1581,46 +1641,17 @@ namespace Sunlighter.ModuleBuilderLib
             this.fieldKey = fieldKey;
         }
 
-        public override bool Equals(object obj)
+        [Bind("fieldKey")]
+        public FieldKey FieldKey => fieldKey;
+
+        public override ImmutableSortedSet<ItemKey> GetReferences()
         {
-            if (!(obj is FieldKeyReference)) return false;
-            FieldKeyReference fObj = (FieldKeyReference)obj;
-            return fieldKey == fObj.fieldKey;
+            return ImmutableSortedSet<ItemKey>.Empty.Add(fieldKey);
         }
 
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.FieldKeyReference);
-            fieldKey.AddToHash(hg);
-        }
-
-        public override bool Equals(FieldReference other)
-        {
-            if (!(other is FieldKeyReference)) return false;
-            FieldKeyReference fObj = (FieldKeyReference)other;
-            return fieldKey == fObj.fieldKey;
-        }
-
-        public override int GetHashCode()
-        {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override ImmutableHashSet<ItemKey> GetReferences()
-        {
-            return ImmutableHashSet<ItemKey>.Empty.Add(fieldKey);
-        }
-
-        public override FieldInfo Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references)
+        public override FieldInfo Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references)
         {
             return (FieldInfo)(references[fieldKey].Value);
-        }
-
-        public override string ToString()
-        {
-            return "[FieldKeyReference, key = " + fieldKey.ToString() + "]";
         }
 
         public override TypeReference Owner
@@ -1634,7 +1665,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ExistingFieldReference : FieldReference
+    [Record]
+    public sealed class ExistingFieldReference : FieldReference
     {
         private readonly FieldInfo fieldInfo;
 
@@ -1643,51 +1675,22 @@ namespace Sunlighter.ModuleBuilderLib
             this.fieldInfo = fieldInfo;
         }
 
-        public override bool Equals(object obj)
+        [Bind("fieldInfo")]
+        public FieldInfo FieldInfo => fieldInfo;
+
+        public override ImmutableSortedSet<ItemKey> GetReferences()
         {
-            if (!(obj is ExistingFieldReference)) return false;
-            ExistingFieldReference eObj = (ExistingFieldReference)obj;
-            return fieldInfo == eObj.fieldInfo;
+            return ImmutableSortedSet<ItemKey>.Empty;
         }
 
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.ExistingFieldReference);
-            hg.Add(fieldInfo);
-        }
-
-        public override bool Equals(FieldReference other)
-        {
-            if (!(other is ExistingFieldReference)) return false;
-            ExistingFieldReference eObj = (ExistingFieldReference)other;
-            return fieldInfo == eObj.fieldInfo;
-        }
-
-        public override int GetHashCode()
-        {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override ImmutableHashSet<ItemKey> GetReferences()
-        {
-            return ImmutableHashSet<ItemKey>.Empty;
-        }
-
-        public override FieldInfo Resolve(ImmutableDictionary<ItemKey, SaBox<object>> references)
+        public override FieldInfo Resolve(ImmutableSortedDictionary<ItemKey, SaBox<object>> references)
         {
             return fieldInfo;
         }
 
-        public override string ToString()
-        {
-            return "[ExistingFieldReference]";
-        }
-
         public override TypeReference Owner
         {
-            get { return new ExistingTypeReference(fieldInfo.DeclaringType); }
+            get { return new ExistingTypeReference(fieldInfo.DeclaringType.AssertNotNull()); }
         }
 
         public override TypeReference FieldType
@@ -1696,112 +1699,70 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
+    [Record]
     public class PropertyKey : ItemKey
     {
         private readonly TypeKey owner;
         private readonly Symbol name;
         private readonly TypeReference propertyType;
-        private readonly List<TypeReference> propertyArgs;
+        private readonly ImmutableList<TypeReference> propertyArgs;
 
-        public PropertyKey(TypeKey owner, Symbol name, TypeReference propertyType, IEnumerable<TypeReference> propertyArgs)
+        public PropertyKey
+        (
+        	TypeKey owner,
+        	Symbol name,
+        	TypeReference propertyType,
+        	ImmutableList<TypeReference> propertyArgs
+        )
         {
             this.owner = owner;
             this.name = name;
             this.propertyType = propertyType;
-            this.propertyArgs = propertyArgs.ToList();
+            this.propertyArgs = propertyArgs;
         }
 
-        public override bool Equals(object obj)
-        {
-            if (!(obj is PropertyKey)) return false;
-            PropertyKey pObj = (PropertyKey)obj;
-            if (owner != pObj.owner) return false;
-            if (name != pObj.name) return false;
-            if (propertyType != pObj.propertyType) return false;
-            if (propertyArgs.Count != pObj.propertyArgs.Count) return false;
-            int iEnd = propertyArgs.Count;
-            for (int i = 0; i < iEnd; ++i)
-            {
-                if (propertyArgs[i] != pObj.propertyArgs[i]) return false;
-            }
-            return true;
-        }
+        [Bind("owner")]
+        public TypeKey Owner => owner;
 
-        public override void AddToHash(IHashGenerator hg)
-        {
-            hg.Add((byte)ItemHashDelimiters.PropertyKey);
-            owner.AddToHash(hg);
-            name.AddToHash(hg);
-            propertyType.AddToHash(hg);
-            int iEnd = propertyArgs.Count;
-            hg.Add(iEnd);
-            for (int i = 0; i < iEnd; ++i)
-            {
-                propertyArgs[i].AddToHash(hg);
-            }
-        }
+        [Bind("name")]
+        public Symbol Name => name;
 
-        public override bool Equals(ItemKey other)
-        {
-            if (!(other is PropertyKey)) return false;
-            PropertyKey pObj = (PropertyKey)other;
-            if (owner != pObj.owner) return false;
-            if (name != pObj.name) return false;
-            if (propertyType != pObj.propertyType) return false;
-            if (propertyArgs.Count != pObj.propertyArgs.Count) return false;
-            int iEnd = propertyArgs.Count;
-            for (int i = 0; i < iEnd; ++i)
-            {
-                if (propertyArgs[i] != pObj.propertyArgs[i]) return false;
-            }
-            return true;
-        }
+        [Bind("propertyType")]
+        public TypeReference PropertyType => propertyType;
 
-        public override int GetHashCode()
-        {
-            HashGenerator hg = new HashGenerator();
-            this.AddToHash(hg);
-            return hg.Hash;
-        }
-
-        public override string ToString()
-        {
-            return "[ PropertyKey owner = " + owner.ToString() +
-                ", name = " + name.ToString() +
-                ", propertyType = " + propertyType.ToString() +
-                ", propertyArgs = (" + propertyArgs.Select(x => x.ToString()).Concatenate(", ") + ") ]";
-        }
+        [Bind("propertyArgs")]
+        public ImmutableList<TypeReference> PropertyArgs => propertyArgs;
     }
 
     public abstract class ItemAux
     {
     }
 
-    public class TypeAux : ItemAux
+    public sealed class TypeAux : ItemAux
     {
         private readonly bool isValueType;
         private readonly bool isInterface;
         private readonly Option<TypeReference> baseType;
-        private readonly TypeReference[] interfaces;
+        private readonly ImmutableList<TypeReference> interfaces;
 
-        public TypeAux(bool isValueType, bool isInterface, Option<TypeReference> baseType, IEnumerable<TypeReference> interfaces)
+        public TypeAux(bool isValueType, bool isInterface, Option<TypeReference> baseType, ImmutableList<TypeReference> interfaces)
         {
             this.isValueType = isValueType;
             this.isInterface = isInterface;
             this.baseType = baseType;
-            this.interfaces = interfaces.ToArray();
+            this.interfaces = interfaces;
         }
 
-        public bool IsValueType { get { return isValueType; } }
+        public bool IsValueType => isValueType;
 
-        public bool IsInterface { get { return isInterface; } }
+        public bool IsInterface => isInterface;
 
-        public Option<TypeReference> BaseType { get { return baseType; } }
+        public Option<TypeReference> BaseType => baseType;
 
-        public IEnumerable<TypeReference> Interfaces { get { return interfaces; } }
+        public ImmutableList<TypeReference> Interfaces => interfaces;
     }
 
-    public class MethodAux : ItemAux
+    public sealed class MethodAux : ItemAux
     {
         private readonly MethodAttributes attributes;
         private readonly TypeReference returnType;
@@ -1817,7 +1778,7 @@ namespace Sunlighter.ModuleBuilderLib
         public TypeReference ReturnType { get { return returnType; } }
     }
 
-    public class ConstructorAux : ItemAux
+    public sealed class ConstructorAux : ItemAux
     {
         private readonly MethodAttributes attributes;
 
@@ -1829,28 +1790,28 @@ namespace Sunlighter.ModuleBuilderLib
         public MethodAttributes Attributes { get { return attributes; } }
     }
 
-    public class FieldAux : ItemAux
+    public sealed class FieldAux : ItemAux
     {
     }
 
-    public class PropertyAux : ItemAux
+    public sealed class PropertyAux : ItemAux
     {
     }
 
-    public class SymbolTable
+    public sealed class SymbolTable
     {
         private static readonly SymbolTable empty = new SymbolTable();
 
-        public static SymbolTable Empty { get { return empty; } }
+        public static SymbolTable Empty => empty;
 
-        private readonly ImmutableDictionary<ItemKey, ItemAux> dict;
+        private readonly ImmutableSortedDictionary<ItemKey, ItemAux> dict;
 
         private SymbolTable()
         {
-            dict = ImmutableDictionary<ItemKey, ItemAux>.Empty;
+            dict = ImmutableSortedDictionary<ItemKey, ItemAux>.Empty;
         }
 
-        private SymbolTable(ImmutableDictionary<ItemKey, ItemAux> dict)
+        private SymbolTable(ImmutableSortedDictionary<ItemKey, ItemAux> dict)
         {
             this.dict = dict;
         }

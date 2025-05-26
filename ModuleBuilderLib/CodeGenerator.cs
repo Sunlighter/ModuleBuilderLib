@@ -5,7 +5,23 @@ using System.Collections.Immutable;
 
 namespace Sunlighter.ModuleBuilderLib
 {
-    public class CodeGenerator
+    public sealed class GeneratedCode
+    {
+        private readonly ImmutableList<LocalInfo> locals;
+        private readonly ImmutableList<ILEmit> opcodes;
+
+        public GeneratedCode(ImmutableList<LocalInfo> locals, ImmutableList<ILEmit> opcodes)
+        {
+            this.locals = locals;
+            this.opcodes = opcodes;
+        }
+
+        public ImmutableList<LocalInfo> Locals => locals;
+
+        public ImmutableList<ILEmit> Opcodes => opcodes;
+    }
+
+    public sealed class CodeGenerator
     {
         private readonly ImmutableList<ILEmit> opcodes;
         private readonly ImmutableList<LocalInfo> locals;
@@ -39,12 +55,12 @@ namespace Sunlighter.ModuleBuilderLib
 
         public bool IsLabelStackEmpty { get { return labelStack.IsEmpty; } }
 
-        public ValueTuple<ImmutableList<LocalInfo>, ImmutableList<ILEmit>> Results
+        public GeneratedCode Results
         {
             get
             {
                 if (!IsLabelStackEmpty) throw new InvalidOperationException("Label stack is not empty");
-                return (locals, opcodes);
+                return new GeneratedCode(locals, opcodes);
             }
         }
 
@@ -240,7 +256,7 @@ namespace Sunlighter.ModuleBuilderLib
 
         public CodeGenerator Ahead(bool useLongForm)
         {
-            Symbol l = new Symbol();
+            Symbol l = Symbol.Gensym();
             ImmutableList<ILEmit> opcodes2 = opcodes.Add(new ILEmitBranch(useLongForm ? ILBranch.Br : ILBranch.Br_S, l));
             ImmutableStack<Symbol> labelStack2 = labelStack.Push(l);
             return new CodeGenerator(opcodes2, locals, labelStack2);
@@ -256,7 +272,7 @@ namespace Sunlighter.ModuleBuilderLib
 
         public CodeGenerator IfNot(ILBranch branch)
         {
-            Symbol l = new Symbol();
+            Symbol l = Symbol.Gensym();
             ImmutableList<ILEmit> opcodes2 = opcodes.Add(new ILEmitBranch(branch, l));
             ImmutableStack<Symbol> labelStack2 = labelStack.Push(l);
             return new CodeGenerator(opcodes2, locals, labelStack2);
@@ -272,7 +288,7 @@ namespace Sunlighter.ModuleBuilderLib
 
         public CodeGenerator Begin()
         {
-            Symbol l = new Symbol();
+            Symbol l = Symbol.Gensym();
             ImmutableList<ILEmit> opcodes2 = opcodes.Add(new ILEmitLabel(l));
             ImmutableStack<Symbol> labelStack2 = labelStack.Push(l);
             return new CodeGenerator(opcodes2, locals, labelStack2);
@@ -309,7 +325,7 @@ namespace Sunlighter.ModuleBuilderLib
 
         public ValueTuple<CodeGenerator, Symbol> DeclareLocal(TypeReference t)
         {
-            Symbol s = new Symbol();
+            Symbol s = Symbol.Gensym();
             CodeGenerator cg2 = new CodeGenerator(opcodes, locals.Add(new LocalInfo(s, t, false)), labelStack);
             return (cg2, s);
         }

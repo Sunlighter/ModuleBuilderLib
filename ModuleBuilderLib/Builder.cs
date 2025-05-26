@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Sunlighter.OptionLib;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -7,20 +8,21 @@ using System.Text;
 
 namespace Sunlighter.ModuleBuilderLib
 {
-    public static class Builder
+    public static class BuilderOfModules
     {
-        public static ImmutableList<T> TopologicalSort<T>(ImmutableList<T> items, Func<T, ImmutableHashSet<T>> getParents)
+        public static ImmutableList<T> TopologicalSort<T>(ImmutableList<T> items, Func<T, ImmutableSortedSet<T>> getParents, Option<IComparer<T>> comparer)
         {
             ImmutableList<T> results = ImmutableList<T>.Empty;
             ImmutableList<T> items1 = items;
             ImmutableList<T> items2 = ImmutableList<T>.Empty;
-            ImmutableHashSet<T> inResults = ImmutableHashSet<T>.Empty;
+            ImmutableSortedSet<T> inResults = ImmutableSortedSet<T>.Empty;
+            if (comparer.HasValue) inResults = inResults.WithComparer(comparer.Value);
 
             while (items1.Count > 0)
             {
                 foreach (T item in items1)
                 {
-                    ImmutableHashSet<T> h1 = getParents(item);
+                    ImmutableSortedSet<T> h1 = getParents(item);
                     h1 = h1.Except(inResults);
                     if (h1.IsEmpty)
                     {
@@ -49,13 +51,13 @@ namespace Sunlighter.ModuleBuilderLib
 
             ImmutableList<ICompileStep> steps = mtb.GetCompileSteps(s);
 
-            ImmutableHashSet<ItemKey> allItemKeys = steps.Select(x => x.Inputs).UnionAll().Union(steps.Select(x => x.Outputs).UnionAll());
+            ImmutableSortedSet<ItemKey> allItemKeys = ImmutableSortedSet<ItemKey>.Empty.UnionAll(steps.Select(x => x.Inputs)).UnionAll(steps.Select(x => x.Outputs));
 
-            ImmutableDictionary<ItemKey, SaBox<object>> references = ImmutableDictionary<ItemKey, SaBox<object>>.Empty;
+            ImmutableSortedDictionary<ItemKey, SaBox<object>> references = ImmutableSortedDictionary<ItemKey, SaBox<object>>.Empty;
             foreach (ItemKey ik in allItemKeys) references = references.Add(ik, new SaBox<object>());
 
-            ImmutableDictionary<ItemKey, ImmutableHashSet<int>> inputDict = ImmutableDictionary<ItemKey, ImmutableHashSet<int>>.Empty;
-            ImmutableDictionary<ItemKey, int> outputDict = ImmutableDictionary<ItemKey, int>.Empty;
+            ImmutableSortedDictionary<ItemKey, ImmutableSortedSet<int>> inputDict = ImmutableSortedDictionary<ItemKey, ImmutableSortedSet<int>>.Empty;
+            ImmutableSortedDictionary<ItemKey, int> outputDict = ImmutableSortedDictionary<ItemKey, int>.Empty;
 
             int iEnd = steps.Count;
             for (int i = 0; i < iEnd; ++i)
@@ -70,7 +72,7 @@ namespace Sunlighter.ModuleBuilderLib
                         }
                         else
                         {
-                            inputDict = inputDict.Add(ik, ImmutableHashSet<int>.Empty.Add(i));
+                            inputDict = inputDict.Add(ik, ImmutableSortedSet<int>.Empty.Add(i));
                         }
                     }
                     foreach (ItemKey ik in steps[i].Outputs)
@@ -87,48 +89,48 @@ namespace Sunlighter.ModuleBuilderLib
                 }
             }
 
-            Func<int, ImmutableHashSet<int>> getParents = delegate (int i)
+            Func<int, ImmutableSortedSet<int>> getParents = delegate (int i)
             {
-                ImmutableHashSet<ItemKey> inputs = steps[i].Inputs;
-                ImmutableHashSet<ItemKey> cantMake = inputs.Where(x => !outputDict.ContainsKey(x)).ToImmutableHashSet();
+                ImmutableSortedSet<ItemKey> inputs = steps[i].Inputs;
+                ImmutableSortedSet<ItemKey> cantMake = inputs.Where(x => !outputDict.ContainsKey(x)).ToImmutableSortedSet();
                 if (!(cantMake.IsEmpty))
                 {
-                    throw new Exception("Don't know how to make " + cantMake.Select(x => x.ToString()).Concatenate(", "));
+                    throw new Exception("Don't know how to make " + string.Join(", ", cantMake.Select(x => x.ToString())));
                 }
-                ImmutableHashSet<int> suppliers = inputs.Select(x => outputDict[x]).ToImmutableHashSet();
+                ImmutableSortedSet<int> suppliers = inputs.Select(x => outputDict[x]).ToImmutableSortedSet();
                 return suppliers;
             };
 
-            ImmutableList<int> phase1 = TopologicalSort<int>(Enumerable.Range(0, iEnd).Where(x => steps[x].Phase == 1).ToImmutableList(), getParents);
+            ImmutableList<int> phase1 = TopologicalSort(Enumerable.Range(0, iEnd).Where(x => steps[x].Phase == 1).ToImmutableList(), getParents, Option<IComparer<int>>.None);
 
             foreach (int i in phase1)
             {
                 steps[i].Compile(mb, references);
             }
 
-            ImmutableHashSet<ItemKey> phase1Results = steps.Where(x => x.Phase == 1).Select(x => x.Outputs).UnionAll();
+            ImmutableSortedSet<ItemKey> phase1Results = ImmutableSortedSet<ItemKey>.Empty.UnionAll(steps.Where(x => x.Phase == 1).Select(x => x.Outputs));
 
-            Func<int, ImmutableHashSet<int>> getParents2 = delegate (int i)
+            Func<int, ImmutableSortedSet<int>> getParents2 = delegate (int i)
             {
-                ImmutableHashSet<ItemKey> inputs = steps[i].Inputs.Except(phase1Results);
-                ImmutableHashSet<ItemKey> cantMake = inputs.Where(x => !outputDict.ContainsKey(x)).ToImmutableHashSet();
+                ImmutableSortedSet<ItemKey> inputs = steps[i].Inputs.Except(phase1Results);
+                ImmutableSortedSet<ItemKey> cantMake = inputs.Where(x => !outputDict.ContainsKey(x)).ToImmutableSortedSet();
 
                 if (!(cantMake.IsEmpty))
                 {
-                    throw new Exception("Don't know how to make " + cantMake.Select(x => x.ToString()).Concatenate(", "));
+                    throw new Exception("Don't know how to make " + string.Join(", ", cantMake.Select(x => x.ToString())));
                 }
-                ImmutableHashSet<int> suppliers = inputs.Select(x => outputDict[x]).ToImmutableHashSet();
+                ImmutableSortedSet<int> suppliers = inputs.Select(x => outputDict[x]).ToImmutableSortedSet();
                 return suppliers;
             };
 
-            ImmutableList<int> phase2 = TopologicalSort<int>(Enumerable.Range(0, iEnd).Where(x => steps[x].Phase == 2).ToImmutableList(), getParents2);
+            ImmutableList<int> phase2 = TopologicalSort(Enumerable.Range(0, iEnd).Where(x => steps[x].Phase == 2).ToImmutableList(), getParents2, Option<IComparer<int>>.None);
 
             foreach (int i in phase2)
             {
                 steps[i].Compile(mb, references);
             }
 
-            ImmutableHashSet<ItemKey> phase2Results = steps.Where(x => x.Phase == 2).Select(x => x.Outputs).UnionAll();
+            ImmutableSortedSet<ItemKey> phase2Results = ImmutableSortedSet<ItemKey>.Empty.UnionAll(steps.Where(x => x.Phase == 2).Select(x => x.Outputs));
 
             return phase2Results.ToImmutableDictionary(x => x, x => (Type)(references[x].Value));
         }
@@ -149,14 +151,31 @@ namespace Sunlighter.ModuleBuilderLib
             return sb.ToString();
         }
 
-        public static ImmutableHashSet<T> UnionAll<T>(this IEnumerable<ImmutableHashSet<T>> sets)
+        [Obsolete]
+        public static ImmutableSortedSet<T> UnionAll<T>(this IEnumerable<ImmutableSortedSet<T>> sets)
         {
-            ImmutableHashSet<T> r = ImmutableHashSet<T>.Empty;
-            foreach (ImmutableHashSet<T> s in sets)
+            ImmutableSortedSet<T> result = ImmutableSortedSet<T>.Empty;
+            bool isFirst = true;
+            foreach (ImmutableSortedSet<T> s in sets)
             {
-                r = r.Union(s);
+                if (isFirst && s.KeyComparer != null)
+                {
+                    result = result.WithComparer(s.KeyComparer);
+                }
+                isFirst = false;
+                result = result.Union(s);
             }
-            return r;
+            return result;
+        }
+
+        public static ImmutableSortedSet<T> UnionAll<T>(this ImmutableSortedSet<T> empty, IEnumerable<ImmutableSortedSet<T>> sets)
+        {
+            ImmutableSortedSet<T> result = empty;
+            foreach (ImmutableSortedSet<T> s in sets)
+            {
+                result = result.Union(s);
+            }
+            return result;
         }
     }
 }

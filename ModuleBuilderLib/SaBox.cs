@@ -7,9 +7,13 @@ namespace Sunlighter.ModuleBuilderLib
         private T theValue;
         private bool hasValue;
 
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public SaBox()
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         {
+#pragma warning disable CS8601 // Possible null reference assignment.
             theValue = default(T);
+#pragma warning restore CS8601 // Possible null reference assignment.
             hasValue = false;
         }
 

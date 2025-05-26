@@ -1,4 +1,5 @@
 ﻿using Sunlighter.OptionLib;
+using Sunlighter.TypeTraitsLib.Building;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -10,12 +11,13 @@ namespace Sunlighter.ModuleBuilderLib
     public interface ICompileStep
     {
         int Phase { get; }
-        ImmutableHashSet<ItemKey> Inputs { get; }
-        ImmutableHashSet<ItemKey> Outputs { get; }
-        void Compile(System.Reflection.Emit.ModuleBuilder mb, ImmutableDictionary<ItemKey, SaBox<object>> vars);
+        ImmutableSortedSet<ItemKey> Inputs { get; }
+        ImmutableSortedSet<ItemKey> Outputs { get; }
+        void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars);
     }
 
-    public class ParamInfo
+    [Record]
+    public sealed class ParamInfo
     {
         private readonly Symbol name;
         private readonly TypeReference paramType;
@@ -26,18 +28,22 @@ namespace Sunlighter.ModuleBuilderLib
             this.paramType = paramType;
         }
 
+        [Bind("name")]
         public Symbol Name { get { return name; } }
 
+        [Bind("paramType")]
         public TypeReference ParamType { get { return paramType; } }
     }
 
+    [UnionOfDescendants]
     public abstract class ElementOfClass
     {
         public abstract SymbolTable DefineSymbols(SymbolTable s, TypeKey owner);
         public abstract ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner);
     }
 
-    public class FieldToBuild : ElementOfClass
+    [Record]
+    public sealed class FieldToBuild : ElementOfClass
     {
         private readonly FieldAttributes attributes;
         private readonly TypeReference fieldType;
@@ -49,6 +55,15 @@ namespace Sunlighter.ModuleBuilderLib
             this.fieldType = fieldType;
             this.name = name;
         }
+
+        [Bind("attributes")]
+        public FieldAttributes Attributes => attributes;
+
+        [Bind("fieldType")]
+        public TypeReference FieldType => fieldType;
+
+        [Bind("name")]
+        public Symbol Name => name;
 
         public override SymbolTable DefineSymbols(SymbolTable s, TypeKey owner)
         {
@@ -77,20 +92,20 @@ namespace Sunlighter.ModuleBuilderLib
                 get { return 1; }
             }
 
-            public ImmutableHashSet<ItemKey> Inputs
+            public ImmutableSortedSet<ItemKey> Inputs
             {
-                get { return ImmutableHashSet<ItemKey>.Empty.Add(owner).Union(parent.fieldType.GetReferences()); }
+                get { return ImmutableSortedSet<ItemKey>.Empty.Add(owner).Union(parent.fieldType.GetReferences()); }
             }
 
-            public ImmutableHashSet<ItemKey> Outputs
+            public ImmutableSortedSet<ItemKey> Outputs
             {
-                get { return ImmutableHashSet<ItemKey>.Empty.Add(fieldKey); }
+                get { return ImmutableSortedSet<ItemKey>.Empty.Add(fieldKey); }
             }
 
-            public void Compile(System.Reflection.Emit.ModuleBuilder mb, ImmutableDictionary<ItemKey, SaBox<object>> vars)
+            public void Compile(System.Reflection.Emit.ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
             {
                 TypeBuilder t = (TypeBuilder)(vars[owner].Value);
-                FieldBuilder fb = t.DefineField(parent.name.Name, parent.fieldType.Resolve(vars), parent.attributes);
+                FieldBuilder fb = t.DefineField(parent.name.SymbolName(), parent.fieldType.Resolve(vars), parent.attributes);
                 vars[fieldKey].Value = fb;
             }
 
@@ -103,12 +118,14 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
+    [UnionOfDescendants]
     public abstract class ElementOfModule
     {
         public abstract SymbolTable DefineSymbols(SymbolTable symbolTable);
         public abstract ImmutableList<ICompileStep> GetCompileSteps(SymbolTable symbolTable);
     }
 
+    [Record]
     public class ClassToBuild : ElementOfModule
     {
         private readonly Symbol name;
@@ -117,7 +134,14 @@ namespace Sunlighter.ModuleBuilderLib
         private readonly ImmutableList<TypeReference> interfaces;
         private readonly ImmutableList<ElementOfClass> elements;
 
-        public ClassToBuild(Symbol name, TypeAttributes attributes, TypeReference ancestor, ImmutableList<TypeReference> interfaces, ImmutableList<ElementOfClass> elements)
+        public ClassToBuild
+        (
+            Symbol name,
+            TypeAttributes attributes,
+            TypeReference ancestor,
+            ImmutableList<TypeReference> interfaces,
+            ImmutableList<ElementOfClass> elements
+        )
         {
             this.name = name;
             this.attributes = attributes;
@@ -125,6 +149,21 @@ namespace Sunlighter.ModuleBuilderLib
             this.interfaces = interfaces;
             this.elements = elements;
         }
+
+        [Bind("name")]
+        public Symbol Name => name;
+
+        [Bind("attributes")]
+        public TypeAttributes Attributes => attributes;
+
+        [Bind("ancestor")]
+        public TypeReference BaseClass => ancestor;
+
+        [Bind("interfaces")]
+        public ImmutableList<TypeReference> Interfaces => interfaces;
+
+        [Bind("elements")]
+        public ImmutableList<ElementOfClass> Elements => elements;
 
         private class MakeClass : ICompileStep
         {
@@ -144,28 +183,28 @@ namespace Sunlighter.ModuleBuilderLib
                 get { return 1; }
             }
 
-            public ImmutableHashSet<ItemKey> Inputs
+            public ImmutableSortedSet<ItemKey> Inputs
             {
-                get { return parent.ancestor.GetReferences().Union(parent.interfaces.Select(x => x.GetReferences()).UnionAll()); }
+                get { return parent.ancestor.GetReferences().UnionAll(parent.interfaces.Select(x => x.GetReferences())); }
             }
 
-            public ImmutableHashSet<ItemKey> Outputs
+            public ImmutableSortedSet<ItemKey> Outputs
             {
-                get { return ImmutableHashSet<ItemKey>.Empty.Add(classKey); }
+                get { return ImmutableSortedSet<ItemKey>.Empty.Add(classKey); }
             }
 
-            public void Compile(ModuleBuilder mb, ImmutableDictionary<ItemKey, SaBox<object>> vars)
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
             {
                 if (parent.ancestor == null)
                 {
                     Type[] interfaces = parent.interfaces.Select(x => x.Resolve(vars)).ToArray();
-                    TypeBuilder tb = mb.DefineType(parent.name.Name, parent.attributes, null, interfaces);
+                    TypeBuilder tb = mb.DefineType(parent.name.SymbolName(), parent.attributes, null, interfaces);
                 }
                 else
                 {
                     Type ancestor = parent.ancestor.Resolve(vars);
                     Type[] interfaces = parent.interfaces.Select(x => x.Resolve(vars)).ToArray();
-                    TypeBuilder tb = mb.DefineType(parent.name.Name, parent.attributes, ancestor, interfaces);
+                    TypeBuilder tb = mb.DefineType(parent.name.SymbolName(), parent.attributes, ancestor, interfaces);
                     vars[classKey].Value = tb;
                 }
             }
@@ -175,15 +214,13 @@ namespace Sunlighter.ModuleBuilderLib
 
         private class BakeClass : ICompileStep
         {
-            private readonly ClassToBuild parent;
             private readonly TypeKey classKey;
             private readonly CompletedTypeKey completedClassKey;
 
             public BakeClass(ClassToBuild parent)
             {
-                this.parent = parent;
-                this.classKey = new TypeKey(parent.name);
-                this.completedClassKey = new CompletedTypeKey(parent.name);
+                classKey = new TypeKey(parent.name);
+                completedClassKey = new CompletedTypeKey(parent.name);
             }
 
             #region ICompileStep Members
@@ -193,17 +230,17 @@ namespace Sunlighter.ModuleBuilderLib
                 get { return 2; }
             }
 
-            public ImmutableHashSet<ItemKey> Inputs
+            public ImmutableSortedSet<ItemKey> Inputs
             {
-                get { return ImmutableHashSet<ItemKey>.Empty.Add(classKey); }
+                get { return ImmutableSortedSet<ItemKey>.Empty.Add(classKey); }
             }
 
-            public ImmutableHashSet<ItemKey> Outputs
+            public ImmutableSortedSet<ItemKey> Outputs
             {
-                get { return ImmutableHashSet<ItemKey>.Empty.Add(completedClassKey); }
+                get { return ImmutableSortedSet<ItemKey>.Empty.Add(completedClassKey); }
             }
 
-            public void Compile(System.Reflection.Emit.ModuleBuilder mb, ImmutableDictionary<ItemKey, SaBox<object>> vars)
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
             {
                 TypeBuilder tb = (TypeBuilder)(vars[classKey].Value);
 #if NETSTANDARD2_0
@@ -238,7 +275,8 @@ namespace Sunlighter.ModuleBuilderLib
         }
     }
 
-    public class ModuleToBuild
+    [Record]
+    public sealed class ModuleToBuild
     {
         private readonly ImmutableList<ElementOfModule> elements;
 
@@ -246,6 +284,9 @@ namespace Sunlighter.ModuleBuilderLib
         {
             this.elements = elements;
         }
+
+        [Bind("elements")]
+        public ImmutableList<ElementOfModule> Elements => elements;
 
         public SymbolTable DefineSymbols(SymbolTable symbolTable)
         {
