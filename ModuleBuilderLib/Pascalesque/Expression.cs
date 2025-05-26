@@ -2990,4 +2990,703 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
             if (tail) ilg.Return();
         }
     }
+
+    [Record]
+    public sealed class ArrayLenExpr2 : Expression2
+    {
+        private readonly Expression2 array;
+
+        public ArrayLenExpr2(Expression2 array)
+        {
+            this.array = array;
+        }
+
+        [Bind("array")]
+        public Expression2 Array => array;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return array.GetEnvSpec();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference tx = array.GetReturnType(s, envDesc);
+            if (!(tx.IsArray)) throw new PascalesqueException("ArrayLen requires an array");
+
+            return ExistingTypeReference.Int32;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return array.GetCompileSteps(s, owner, envDesc);
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return array.GetReferences(s, owner, envDesc);
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            TypeReference tx = array.GetReturnType(s, envDesc.TypesOnly());
+
+            array.Compile(s, owner, cc, envDesc, references, false);
+
+            if (tail) ilg.Tail();
+            ilg.CallVirt(tx.Resolve(references).GetMethod("get_Length", Type.EmptyTypes).AssertNotNull());
+            if (tail) ilg.Return();
+        }
+    }
+
+    [Record]
+    public sealed class ArrayRefExpr2 : Expression2
+    {
+        private readonly Expression2 array;
+        private readonly Expression2 index;
+
+        public ArrayRefExpr2(Expression2 array, Expression2 index)
+        {
+            this.array = array;
+            this.index = index;
+        }
+
+        [Bind("array")]
+        public Expression2 Array => array;
+
+        [Bind("index")]
+        public Expression2 Index => index;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return array.GetEnvSpec() | index.GetEnvSpec();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference t = array.GetReturnType(s, envDesc);
+            if (!(t.IsArray)) throw new PascalesqueException("ArrayRef type mismatch; array required");
+
+            TypeReference i = index.GetReturnType(s, envDesc);
+            if (i != ExistingTypeReference.Int32 && i != ExistingTypeReference.IntPtr) throw new PascalesqueException("ArrayRef type mismatch; index must be int or IntPtr");
+
+            return t.GetElementType();
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return array.GetCompileSteps(s, owner, envDesc).AddRange(index.GetCompileSteps(s, owner, envDesc));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return array.GetReferences(s, owner, envDesc).Union(array.GetReturnType(s, envDesc).GetElementType().GetReferences()).Union(index.GetReferences(s, owner, envDesc));
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            TypeReference t = array.GetReturnType(s, envDesc.TypesOnly());
+            if (!(t.IsArray)) throw new PascalesqueException("ArrayRef type mismatch; array required");
+
+            TypeReference elType = t.GetElementType();
+
+            array.Compile(s, owner, cc, envDesc, references, false);
+            index.Compile(s, owner, cc, envDesc, references, false);
+            ilg.LoadElement(elType.Resolve(references));
+            if (tail) ilg.Return();
+        }
+    }
+
+    [Record]
+    public sealed class ArraySetExpr2 : Expression2
+    {
+        private readonly Expression2 array;
+        private readonly Expression2 index;
+        private readonly Expression2 value;
+
+        public ArraySetExpr2(Expression2 array, Expression2 index, Expression2 value)
+        {
+            this.array = array;
+            this.index = index;
+            this.value = value;
+        }
+
+        [Bind("array")]
+        public Expression2 Array => array;
+
+        [Bind("index")]
+        public Expression2 Index => index;
+
+        [Bind("value")]
+        public Expression2 Value => value;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return array.GetEnvSpec() | index.GetEnvSpec() | value.GetEnvSpec();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference t = array.GetReturnType(s, envDesc);
+            if (!(t.IsArray)) throw new PascalesqueException("ArraySet type mismatch; array required");
+
+            TypeReference i = index.GetReturnType(s, envDesc);
+            if (i != ExistingTypeReference.Int32 && i != ExistingTypeReference.IntPtr) throw new PascalesqueException("ArraySet type mismatch; index must be int or IntPtr");
+
+            TypeReference x = value.GetReturnType(s, envDesc);
+            if (x != t.GetElementType()) throw new PascalesqueException("ArraySet type mismatch; value must match item type of array");
+
+            return ExistingTypeReference.Void;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return array.GetCompileSteps(s, owner, envDesc)
+                .AddRange(index.GetCompileSteps(s, owner, envDesc))
+                .AddRange(value.GetCompileSteps(s, owner, envDesc));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return array.GetReferences(s, owner, envDesc)
+                .Union(array.GetReturnType(s, envDesc).GetElementType().GetReferences())
+                .Union(index.GetReferences(s, owner, envDesc))
+                .Union(value.GetReferences(s, owner, envDesc));
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            TypeReference t = array.GetReturnType(s, envDesc.TypesOnly());
+            if (!(t.IsArray)) throw new PascalesqueException("ArrayRef type mismatch; array required");
+
+            TypeReference elType = t.GetElementType();
+
+            array.Compile(s, owner, cc, envDesc, references, false);
+            index.Compile(s, owner, cc, envDesc, references, false);
+            value.Compile(s, owner, cc, envDesc, references, false);
+            ilg.StoreElement(elType.Resolve(references));
+            if (tail) ilg.Return();
+        }
+    }
+
+    [Record]
+    public sealed class NewArrayExpr2 : Expression2
+    {
+        private readonly TypeReference itemType;
+        private readonly Expression2 size;
+
+        public NewArrayExpr2(TypeReference itemType, Expression2 size)
+        {
+            this.itemType = itemType;
+            this.size = size;
+        }
+
+        [Bind("itemType")]
+        public TypeReference ItemType => itemType;
+
+        [Bind("size")]
+        public Expression2 Size => size;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return size.GetEnvSpec();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference sizeType = size.GetReturnType(s, envDesc);
+            if (sizeType != ExistingTypeReference.Int32 && sizeType != ExistingTypeReference.IntPtr) throw new PascalesqueException("Incorrect type for size of new array");
+            return itemType.MakeArrayType();
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return size.GetCompileSteps(s, owner, envDesc);
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return size.GetReferences(s, owner, envDesc).Union(itemType.GetReferences());
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            size.Compile(s, owner, cc, envDesc, references, false);
+            ilg.Emit(OpCodes.Newarr, itemType.Resolve(references));
+            if (tail) ilg.Return();
+        }
+    }
+
+    [Record]
+    public sealed class MethodCallExpr2 : Expression2
+    {
+        private readonly MethodReference methodToCall;
+        private readonly bool allowVirtual;
+        private readonly ImmutableList<Expression2> arguments;
+
+        public MethodCallExpr2(MethodReference methodToCall, bool allowVirtual, ImmutableList<Expression2> arguments)
+        {
+            this.methodToCall = methodToCall;
+            this.allowVirtual = allowVirtual;
+            this.arguments = arguments;
+        }
+
+        [Bind("methodToCall")]
+        public MethodReference MethodToCall => methodToCall;
+
+        [Bind("allowVirtual")]
+        public bool AllowVirtual => allowVirtual;
+
+        [Bind("arguments")]
+        public ImmutableList<Expression2> Arguments => arguments;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            EnvSpec e = EnvSpec.Empty();
+            foreach (Expression2 arg in arguments)
+            {
+                e |= arg.GetEnvSpec();
+            }
+            return e;
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            int iEnd = methodToCall.ParameterCount;
+            if (arguments.Count != iEnd) throw new PascalesqueException("Argument count doesn't match parameter count");
+
+            for (int i = 0; i < iEnd; ++i)
+            {
+                TypeReference tParam = methodToCall.GetParameterType(i);
+                //if (tParam.IsByRef) throw new PascalesqueException("ByRef parameters not supported");
+                TypeReference tArg = arguments[i].GetReturnType(s, envDesc);
+                if (tParam != tArg) throw new PascalesqueException("Argument type doesn't match parameter type");
+            }
+
+            return methodToCall.GetReturnType(s);
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return arguments.SelectMany(arg => arg.GetCompileSteps(s, owner, envDesc)).ToImmutableList();
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return arguments.Select(x => x.GetReferences(s, owner, envDesc)).UnionAll().Union(methodToCall.GetReferences());
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            foreach (Expression2 arg in arguments)
+            {
+                arg.Compile(s, owner, cc, envDesc, references, false);
+            }
+
+            MethodInfo mi = methodToCall.Resolve(references);
+            if (mi.IsVirtual && allowVirtual)
+            {
+                if (tail) ilg.Tail();
+                ilg.CallVirt(mi);
+                if (tail) ilg.Return();
+            }
+            else
+            {
+                if (tail) ilg.Tail();
+                ilg.Call(mi);
+                if (tail) ilg.Return();
+            }
+        }
+    }
+
+    [Record]
+    public sealed class ConstructorCallExpr2 : Expression2
+    {
+        private readonly ConstructorReference constructorToCall;
+        private readonly Expression2 thisObj;
+        private readonly ImmutableList<Expression2> arguments;
+
+        public ConstructorCallExpr2(ConstructorReference constructorToCall, Expression2 thisObj, ImmutableList<Expression2> arguments)
+        {
+            this.constructorToCall = constructorToCall;
+            this.thisObj = thisObj;
+            this.arguments = arguments;
+        }
+
+        [Bind("constructorToCall")]
+        public ConstructorReference ConstructorToCall => constructorToCall;
+
+        [Bind("thisObj")]
+        public Expression2 ThisObj => thisObj;
+
+        [Bind("arguments")]
+        public ImmutableList<Expression2> Arguments => arguments;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            EnvSpec e = thisObj.GetEnvSpec();
+            foreach (Expression2 arg in arguments)
+            {
+                e |= arg.GetEnvSpec();
+            }
+            return e;
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            int iEnd = constructorToCall.ParameterCount;
+            if (arguments.Count != iEnd) throw new PascalesqueException("Argument count doesn't match parameter count");
+
+            // thisObj type not checked
+
+            for (int i = 0; i < iEnd; ++i)
+            {
+                TypeReference tParam = constructorToCall.GetParameterType(i);
+                //if (tParam.IsByRef) throw new PascalesqueException("ByRef parameters not supported");
+                TypeReference tArg = arguments[i].GetReturnType(s, envDesc);
+                if (tParam != tArg) throw new PascalesqueException("Argument type doesn't match parameter type");
+            }
+
+            return ExistingTypeReference.Void;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return thisObj.GetCompileSteps(s, owner, envDesc)
+                .AddRange(arguments.SelectMany(arg => arg.GetCompileSteps(s, owner, envDesc)));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return thisObj.GetReferences(s, owner, envDesc)
+                .Union(arguments.Select(x => x.GetReferences(s, owner, envDesc)).UnionAll())
+                .Union(constructorToCall.GetReferences());
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            thisObj.Compile(s, owner, cc, envDesc, references, false);
+
+            foreach (Expression2 arg in arguments)
+            {
+                arg.Compile(s, owner, cc, envDesc, references, false);
+            }
+
+            ConstructorInfo ci = constructorToCall.Resolve(references);
+
+            if (tail) ilg.Tail();
+            ilg.Call(ci);
+            if (tail) ilg.Return();
+        }
+    }
+
+    public sealed class NewObjExpr2 : Expression2
+    {
+        private readonly ConstructorReference constructorToCall;
+        private readonly ImmutableList<Expression2> arguments;
+
+        public NewObjExpr2(ConstructorReference constructorToCall, ImmutableList<Expression2> arguments)
+        {
+            this.constructorToCall = constructorToCall;
+            this.arguments = arguments;
+        }
+
+        [Bind("constructorToCall")]
+        public ConstructorReference ConstructorToCall => constructorToCall;
+
+        [Bind("arguments")]
+        public ImmutableList<Expression2> Arguments => arguments;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            EnvSpec e = EnvSpec.Empty();
+            foreach (Expression2 arg in arguments)
+            {
+                e |= arg.GetEnvSpec();
+            }
+            return e;
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            int iEnd = arguments.Count;
+            for (int i = 0; i < iEnd; ++i)
+            {
+                TypeReference t1 = arguments[i].GetReturnType(s, envDesc);
+                TypeReference t2 = constructorToCall.GetParameterType(i);
+                if (t1 != t2) throw new PascalesqueException("Type mismatch in NewObj constructor call");
+            }
+            return constructorToCall.ConstructorOfWhat;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return arguments.SelectMany(arg => arg.GetCompileSteps(s, owner, envDesc)).ToImmutableList();
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return arguments.Select(x => x.GetReferences(s, owner, envDesc)).UnionAll();
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            foreach (Expression2 arg in arguments)
+            {
+                arg.Compile(s, owner, cc, envDesc, references, false);
+            }
+
+            ConstructorInfo ci = constructorToCall.Resolve(references);
+
+            ilg.NewObj(ci);
+            if (tail) ilg.Return();
+        }
+    }
+
+    [Record]
+    public sealed class FieldRefExpr2 : Expression2
+    {
+        private readonly Expression2 fieldOfWhat;
+        private readonly FieldReference fieldReference;
+
+        public FieldRefExpr2(Expression2 fieldOfWhat, FieldReference fieldReference)
+        {
+            this.fieldOfWhat = fieldOfWhat;
+            this.fieldReference = fieldReference;
+        }
+
+        [Bind("fieldOfWhat")]
+        public Expression2 FieldOfWhat => fieldOfWhat;
+
+        [Bind("fieldReference")]
+        public FieldReference FieldReference => fieldReference;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return fieldOfWhat.GetEnvSpec();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference t = fieldOfWhat.GetReturnType(s, envDesc);
+            if (t != fieldReference.Owner) throw new PascalesqueException("Type Mismatch for Field Reference");
+
+            return fieldReference.FieldType;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return fieldOfWhat.GetCompileSteps(s, owner, envDesc);
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return fieldOfWhat.GetReferences(s, owner, envDesc).Union(fieldReference.GetReferences());
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            fieldOfWhat.Compile(s, owner, cc, envDesc, references, false);
+            ilg.LoadField(fieldReference.Resolve(references));
+            if (tail) ilg.Return();
+        }
+    }
+
+    [Record]
+    public sealed class FieldSetExpr2 : Expression2
+    {
+        private readonly Expression2 fieldOfWhat;
+        private readonly FieldReference fieldReference;
+        private readonly Expression2 val;
+
+        public FieldSetExpr2(Expression2 fieldOfWhat, FieldReference fieldReference, Expression2 val)
+        {
+            this.fieldOfWhat = fieldOfWhat;
+            this.fieldReference = fieldReference;
+            this.val = val;
+        }
+
+        [Bind("fieldOfWhat")]
+        public Expression2 FieldOfWhat => fieldOfWhat;
+
+        [Bind("fieldReference")]
+        public FieldReference FieldReference => fieldReference;
+
+        [Bind("val")]
+        public Expression2 Val => val;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return fieldOfWhat.GetEnvSpec() | val.GetEnvSpec();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference t1 = fieldOfWhat.GetReturnType(s, envDesc);
+            TypeReference t2 = val.GetReturnType(s, envDesc);
+            if (t1 != fieldReference.Owner || t2 != fieldReference.FieldType) throw new PascalesqueException("Type mismatch for Field Set");
+
+            return ExistingTypeReference.Void;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return fieldOfWhat.GetCompileSteps(s, owner, envDesc)
+                .AddRange(val.GetCompileSteps(s, owner, envDesc));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return fieldOfWhat.GetReferences(s, owner, envDesc).Union(val.GetReferences(s, owner, envDesc)).Union(fieldReference.GetReferences());
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            fieldOfWhat.Compile(s, owner, cc, envDesc, references, false);
+            val.Compile(s, owner, cc, envDesc, references, false);
+            ilg.StoreField(fieldReference.Resolve(references));
+            if (tail) ilg.Return();
+        }
+    }
+
+    [Record]
+    public sealed class PokeExpr2 : Expression2
+    {
+        private readonly Expression2 ptr;
+        private readonly Expression2 value;
+
+        public PokeExpr2(Expression2 ptr, Expression2 value)
+        {
+            this.ptr = ptr;
+            this.value = value;
+        }
+
+        [Bind("ptr")]
+        public Expression2 Ptr => ptr;
+
+        [Bind("value")]
+        public Expression2 Value => value;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return ptr.GetEnvSpec() | value.GetEnvSpec();
+        }
+
+        private static readonly Type[] okTypes = new Type[]
+        {
+            typeof(byte), typeof(short), typeof(int), typeof(long), typeof(IntPtr),
+            typeof(sbyte), typeof(ushort), typeof(uint), typeof(ulong), typeof(UIntPtr),
+            typeof(float), typeof(double), typeof(char), typeof(bool)
+        };
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference t1 = ptr.GetReturnType(s, envDesc);
+            TypeReference t2 = value.GetReturnType(s, envDesc);
+
+            if (!(t2 is ExistingTypeReference) || !(okTypes.Contains(((ExistingTypeReference)t2).ExistingType))) throw new PascalesqueException("Poke: argument type cannot be poked");
+
+            if (t1 != ExistingTypeReference.IntPtr && t1 != ExistingTypeReference.UIntPtr) throw new PascalesqueException("Poke: pointer type is not IntPtr");
+
+            return ExistingTypeReference.Void;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return ptr.GetCompileSteps(s, owner, envDesc)
+                .AddRange(value.GetCompileSteps(s, owner, envDesc));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return ptr.GetReferences(s, owner, envDesc).Union(value.GetReferences(s, owner, envDesc));
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            ptr.Compile(s, owner, cc, envDesc, references, false);
+            value.Compile(s, owner, cc, envDesc, references, false);
+            Type t2 = value.GetReturnType(s, envDesc.TypesOnly()).Resolve(references);
+            ilg.Unaligned(Alignment.One);
+            ilg.StoreObjIndirect(t2);
+            if (tail) ilg.Return();
+        }
+    }
+
+    [Record]
+    public sealed class PeekExpr2 : Expression2
+    {
+        private readonly Expression2 ptr;
+        private readonly TypeReference type;
+
+        public PeekExpr2(Expression2 ptr, TypeReference type)
+        {
+            this.ptr = ptr;
+            this.type = type;
+        }
+
+        [Bind("ptr")]
+        public Expression2 Ptr => ptr;
+
+        [Bind("type")]
+        public TypeReference Type => type;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return ptr.GetEnvSpec();
+        }
+
+        private static readonly Type[] okTypes = new Type[]
+        {
+            typeof(byte), typeof(short), typeof(int), typeof(long), typeof(IntPtr),
+            typeof(sbyte), typeof(ushort), typeof(uint), typeof(ulong), typeof(UIntPtr),
+            typeof(float), typeof(double), typeof(char), typeof(bool)
+        };
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            if (!(type is ExistingTypeReference) || !(okTypes.Contains(((ExistingTypeReference)type).ExistingType))) throw new PascalesqueException("Peek: type can't be peeked");
+
+            return type;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return ptr.GetCompileSteps(s, owner, envDesc);
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return ptr.GetReferences(s, owner, envDesc);
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+            ptr.Compile(s, owner, cc, envDesc, references, false);
+            ilg.Unaligned(Alignment.One);
+            ilg.LoadObjIndirect(type.Resolve(references));
+            if (tail) ilg.Return();
+        }
+    }
 }
