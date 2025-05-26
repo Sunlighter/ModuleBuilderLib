@@ -1336,4 +1336,1028 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
             if (!tail) { System.Diagnostics.Debug.Assert(lEnd.HasValue); cc.ILGenerator.MarkLabel(lEnd.Value); }
         }
     }
+
+    [Record]
+    public sealed class LetClause2
+    {
+        private readonly Symbol name;
+        private readonly TypeReference varType;
+        private readonly Expression2 val;
+
+        public LetClause2(Symbol name, TypeReference varType, Expression2 val)
+        {
+            this.name = name;
+            this.varType = varType;
+            this.val = val;
+        }
+
+        [Bind("name")]
+        public Symbol Name => name;
+
+        [Bind("varType")]
+        public TypeReference VarType => varType;
+
+        [Bind("val")]
+        public Expression2 Value => val;
+    }
+
+    [Record]
+    public sealed class LetExpr2 : Expression2
+    {
+        private readonly ImmutableList<LetClause2> clauses;
+        private readonly Expression2 body;
+
+        public LetExpr2(ImmutableList<LetClause2> clauses, Expression2 body)
+        {
+            this.clauses = clauses;
+            this.body = body;
+
+            if (clauses.Select(x => x.Name).HasDuplicates()) throw new PascalesqueException("Duplicate variables in letrec");
+        }
+
+        [Bind("clauses")]
+        public ImmutableList<LetClause2> Clauses => clauses;
+
+        [Bind("body")]
+        public Expression2 Body => body;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            EnvSpec e = body.GetEnvSpec() - clauses.Select(x => x.Name);
+            foreach (LetClause2 lc in clauses)
+            {
+                e |= lc.Value.GetEnvSpec();
+            }
+            return e;
+        }
+
+        private EnvDescTypesOnly2 MakeInnerEnvDesc(EnvDescTypesOnly2 outerEnvDesc)
+        {
+            return EnvDescTypesOnly2.Shadow(outerEnvDesc, clauses.Select(x => new ParamInfo(x.Name, x.VarType)));
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            if (clauses.Select(x => x.Name).HasDuplicates()) throw new PascalesqueException("let has two variables with the same name");
+            if (clauses.Any(x => x.VarType != x.Value.GetReturnType(s, envDesc))) throw new PascalesqueException("a variable's type does not match that of its initializer");
+
+            EnvDescTypesOnly2 e2 = MakeInnerEnvDesc(envDesc);
+
+            return body.GetReturnType(s, e2);
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            EnvDescTypesOnly2 e2 = MakeInnerEnvDesc(envDesc);
+
+            return ImmutableList<ICompileStep>.Empty
+                .AddRange(clauses.SelectMany(c => c.Value.GetCompileSteps(s, owner, envDesc)))
+                .AddRange(body.GetCompileSteps(s, owner, e2));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            EnvDescTypesOnly2 e2 = MakeInnerEnvDesc(envDesc);
+            return clauses.Select(x => x.Value.GetReferences(s, owner, envDesc)).UnionAll().Union(body.GetReferences(s, owner, e2));
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            EnvSpec e = body.GetEnvSpec();
+
+            List<Tuple<Symbol, IVarDesc2>> theList = new List<Tuple<Symbol, IVarDesc2>>();
+
+            foreach (LetClause2 l in clauses)
+            {
+                bool boxed = false;
+                if (e.ContainsKey(l.Name))
+                {
+                    boxed = e[l.Name].IsCaptured;
+                }
+
+                LocalBuilder lb = ilg.DeclareLocal((boxed ? PascalesqueExtensions.MakeBoxedType(l.VarType) : l.VarType).Resolve(references));
+                IVarDesc2 varDesc = new LocalVarDesc2(l.VarType, boxed, lb.LocalIndex);
+
+                theList.Add(new Tuple<Symbol, IVarDesc2>(l.Name, varDesc));
+                if (boxed)
+                {
+                    ilg.NewObj(PascalesqueExtensions.MakeBoxedType(l.VarType).Resolve(references).GetConstructor(Type.EmptyTypes).AssertNotNull());
+                    ilg.StoreLocal(lb);
+                }
+                varDesc.Store(cc, references, delegate () { l.Value.Compile(s, owner, cc, envDesc, references, false); }, false);
+            }
+
+            EnvDesc2 innerEnvDesc = EnvDesc2.Shadow(envDesc, theList);
+
+            body.Compile(s, owner, cc, innerEnvDesc, references, tail);
+        }
+    }
+
+    [Record]
+    public sealed class LetStarExpr2 : Expression2
+    {
+        private readonly ImmutableList<LetClause2> clauses;
+        private readonly Expression2 body;
+
+        public LetStarExpr2(ImmutableList<LetClause2> clauses, Expression2 body)
+        {
+            this.clauses = clauses;
+            this.body = body;
+        }
+
+        [Bind("clauses")]
+        public ImmutableList<LetClause2> Clauses => clauses;
+
+        [Bind("body")]
+        public Expression2 Body => body;
+
+        private EnvSpec GetEnvSpec(int j)
+        {
+            EnvSpec e = body.GetEnvSpec();
+            int i = clauses.Count;
+            while (i > j)
+            {
+                --i;
+                LetClause2 lc = clauses[i];
+                e -= lc.Name;
+                e |= lc.Value.GetEnvSpec();
+            }
+            return e;
+        }
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return GetEnvSpec(0);
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            EnvDescTypesOnly2 e2 = envDesc;
+
+            foreach (LetClause2 lc in clauses)
+            {
+                if (lc.Value.GetReturnType(s, e2) != lc.VarType) throw new PascalesqueException("a variable's type does not match that of its initializer");
+                e2 = EnvDescTypesOnly2.Shadow(e2, lc.Name, lc.VarType);
+            }
+
+            return body.GetReturnType(s, e2);
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            ImmutableList<ICompileStep> results = ImmutableList<ICompileStep>.Empty;
+            EnvDescTypesOnly2 e2 = envDesc;
+            int iEnd = clauses.Count;
+            for (int i = 0; i < iEnd; ++i)
+            {
+                results = results.AddRange(clauses[i].Value.GetCompileSteps(s, owner, e2));
+                e2 = EnvDescTypesOnly2.Shadow(e2, clauses[i].Name, clauses[i].VarType);
+            }
+            results = results.AddRange(body.GetCompileSteps(s, owner, e2));
+            return results;
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            ImmutableSortedSet<ItemKey> h = ImmutableSortedSet<ItemKey>.Empty;
+            EnvDescTypesOnly2 e2 = envDesc;
+            int iEnd = clauses.Count;
+            for (int i = 0; i < iEnd; ++i)
+            {
+                h = h.Union(clauses[i].Value.GetReferences(s, owner, e2));
+                e2 = EnvDescTypesOnly2.Shadow(e2, clauses[i].Name, clauses[i].VarType);
+            }
+            h = h.Union(body.GetReferences(s, owner, e2));
+            return h;
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            EnvDesc2 e2 = envDesc;
+            int iEnd = clauses.Count;
+            for (int i = 0; i < iEnd; ++i)
+            {
+                LetClause2 l = clauses[i];
+                EnvSpec e = GetEnvSpec(i + 1);
+                bool boxed = false;
+                if (e.ContainsKey(l.Name))
+                {
+                    boxed = e[l.Name].IsCaptured;
+                }
+
+                LocalBuilder lb = ilg.DeclareLocal((boxed ? PascalesqueExtensions.MakeBoxedType(l.VarType) : l.VarType).Resolve(references));
+                IVarDesc2 varDesc = new LocalVarDesc2(l.VarType, boxed, lb.LocalIndex);
+
+                if (boxed)
+                {
+                    ilg.NewObj(PascalesqueExtensions.MakeBoxedType(l.VarType).Resolve(references).GetConstructor(Type.EmptyTypes).AssertNotNull());
+                    ilg.StoreLocal(lb);
+                }
+                varDesc.Store(cc, references, delegate () { l.Value.Compile(s, owner, cc, e2, references, false); }, false);
+
+                e2 = EnvDesc2.Shadow(e2, l.Name, varDesc);
+            }
+
+            body.Compile(s, owner, cc, e2, references, tail);
+        }
+    }
+
+    [Record]
+    public sealed class LetRecExpr2 : Expression2
+    {
+        private readonly ImmutableList<LetClause2> clauses;
+        private readonly Expression2 body;
+
+        public LetRecExpr2(ImmutableList<LetClause2> clauses, Expression2 body)
+        {
+            this.clauses = clauses;
+            this.body = body;
+
+            if (clauses.Select(x => x.Name).HasDuplicates()) throw new PascalesqueException("Duplicate variables in letrec");
+        }
+
+        [Bind("clauses")]
+        public ImmutableList<LetClause2> Clauses => clauses;
+
+        [Bind("body")]
+        public Expression2 Body => body;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            EnvSpec e = body.GetEnvSpec();
+            foreach (LetClause2 lc in clauses)
+            {
+                e |= lc.Value.GetEnvSpec();
+            }
+            return e - clauses.Select(x => x.Name);
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            EnvDescTypesOnly2 innerEnvDesc = EnvDescTypesOnly2.Shadow(envDesc, clauses.Select(x => new ParamInfo(x.Name, x.VarType)));
+            return body.GetReturnType(s, innerEnvDesc);
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            ImmutableList<ParamInfo> theList =
+                clauses.Select(l => new ParamInfo(l.Name, l.VarType)).ToImmutableList();
+
+            EnvDescTypesOnly2 innerEnvDesc = EnvDescTypesOnly2.Shadow(envDesc, theList);
+
+            return ImmutableList<ICompileStep>.Empty
+                .AddRange(clauses.SelectMany(c => c.Value.GetCompileSteps(s, owner, innerEnvDesc)))
+                .AddRange(body.GetCompileSteps(s, owner, innerEnvDesc));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            ImmutableSortedSet<ItemKey> h = ImmutableSortedSet<ItemKey>.Empty;
+            List<ParamInfo> theList = new List<ParamInfo>();
+            foreach (LetClause2 l in clauses)
+            {
+                theList.Add(new ParamInfo(l.Name, l.VarType));
+            }
+            EnvDescTypesOnly2 innerEnvDesc = EnvDescTypesOnly2.Shadow(envDesc, theList);
+            foreach (LetClause2 l in clauses)
+            {
+                h = h.Union(l.Value.GetReferences(s, owner, innerEnvDesc));
+            }
+            h = h.Union(body.GetReferences(s, owner, innerEnvDesc));
+            return h;
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            List<Tuple<Symbol, IVarDesc2>> theList = new List<Tuple<Symbol, IVarDesc2>>();
+
+            foreach (LetClause2 l in clauses)
+            {
+                LocalBuilder lb = ilg.DeclareLocal(PascalesqueExtensions.MakeBoxedType(l.VarType).Resolve(references));
+                IVarDesc2 varDesc = new LocalVarDesc2(l.VarType, true, lb.LocalIndex);
+
+                theList.Add(new Tuple<Symbol, IVarDesc2>(l.Name, varDesc));
+                ilg.NewObj(PascalesqueExtensions.MakeBoxedType(l.VarType).Resolve(references).GetConstructor(Type.EmptyTypes).AssertNotNull());
+                ilg.StoreLocal(lb);
+            }
+
+            EnvDesc2 innerEnvDesc = EnvDesc2.Shadow(envDesc, theList);
+
+            int iEnd = theList.Count;
+            for (int i = 0; i < iEnd; ++i)
+            {
+                IVarDesc2 varDesc = theList[i].Item2;
+                varDesc.Store(cc, references, delegate () { clauses[i].Value.Compile(s, owner, cc, innerEnvDesc, references, false); }, false);
+            }
+
+            body.Compile(s, owner, cc, innerEnvDesc, references, tail);
+        }
+    }
+
+    public sealed class LetLoopExpr2 : Expression2
+    {
+        private readonly Symbol loopName;
+        private readonly TypeReference loopReturnType;
+        private readonly ImmutableList<LetClause2> clauses;
+        private readonly Expression2 body;
+
+        private readonly Lazy<Expression2> equivalency;
+
+        public LetLoopExpr2(Symbol loopName, TypeReference loopReturnType, ImmutableList<LetClause2> clauses, Expression2 body)
+        {
+            this.loopName = loopName;
+            this.loopReturnType = loopReturnType;
+            this.clauses = clauses;
+            this.body = body;
+
+            if (clauses.Select(x => x.Name).HasDuplicates()) throw new PascalesqueException("Duplicate variables in let loop");
+
+            equivalency = new Lazy<Expression2>(MakeEquivalency, false);
+        }
+
+        private Expression2 MakeEquivalency()
+        {
+            TypeReference funcType = GetFuncType();
+
+            return new LetRecExpr2
+            (
+                ImmutableList<LetClause2>.Empty.Add
+                (
+                    new LetClause2
+                    (
+                        loopName, funcType,
+                        new LambdaExpr2
+                        (
+                            clauses.Select(x => new ParamInfo(x.Name, x.VarType)).ToImmutableList(),
+                            body
+                        )
+                    )
+                ),
+                new InvokeExpr2
+                (
+                    new VarRefExpr2(loopName),
+                    clauses.Select(x => x.Value).ToImmutableList()
+                )
+            );
+        }
+
+        public override EnvSpec GetEnvSpec()
+        {
+            EnvSpec e = body.GetEnvSpec();
+            foreach (LetClause2 lc in clauses)
+            {
+                e |= lc.Value.GetEnvSpec();
+            }
+            return e - clauses.Select(x => x.Name);
+        }
+
+        private TypeReference GetFuncType()
+        {
+            if (loopReturnType == ExistingTypeReference.Void)
+            {
+                return TypeReference.GetActionType(clauses.Select(x => x.VarType).ToImmutableList());
+            }
+            else
+            {
+                return TypeReference.GetFuncType(clauses.Select(x => x.VarType).AndAlso(loopReturnType).ToImmutableList());
+            }
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference funcType = GetFuncType();
+
+            EnvDescTypesOnly2 innerEnvDesc = EnvDescTypesOnly2.Shadow(envDesc, clauses.Select(x => new ParamInfo(x.Name, x.VarType)).AndAlso(new ParamInfo(loopName, funcType)));
+            TypeReference t = body.GetReturnType(s, innerEnvDesc);
+            if (t != loopReturnType) throw new PascalesqueException("let loop: loop does not return expected type");
+
+            return t;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return equivalency.Value.GetCompileSteps(s, owner, envDesc);
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return equivalency.Value.GetReferences(s, owner, envDesc);
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            equivalency.Value.Compile(s, owner, cc, envDesc, references, tail);
+        }
+    }
+
+    public sealed class LambdaExpr2 : Expression2
+    {
+        private readonly ImmutableList<ParamInfo> parameters;
+        private readonly Expression2 body;
+        private readonly Symbol lambdaObjTypeName;
+
+        public LambdaExpr2(ImmutableList<ParamInfo> parameters, Expression2 body)
+        {
+            this.parameters = parameters;
+            this.body = body;
+            this.lambdaObjTypeName = Symbol.Gensym();
+        }
+
+        public override EnvSpec GetEnvSpec()
+        {
+            EnvSpec e = body.GetEnvSpec() - parameters.Select(x => x.Name);
+            return EnvSpec.CaptureAll(e);
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            EnvDescTypesOnly2 innerEnvDesc = EnvDescTypesOnly2.Shadow(envDesc, parameters.Select(x => new ParamInfo(x.Name, x.ParamType)));
+            TypeReference returnType = body.GetReturnType(s, innerEnvDesc);
+            if (returnType == ExistingTypeReference.Void)
+            {
+                return TypeReference.GetActionType(parameters.Select(x => x.ParamType).ToImmutableList());
+            }
+            else
+            {
+                ImmutableList<TypeReference> t = parameters.Select(x => x.ParamType).ToImmutableList();
+                t = t.Add(returnType);
+
+                return TypeReference.GetFuncType(t);
+            }
+        }
+
+        [Bind("parameters")]
+        public ImmutableList<ParamInfo> Parameters => parameters;
+
+        [Bind("body")]
+        public Expression2 Body => body;
+
+        private sealed class CompileStepInfo
+        {
+            private readonly LambdaExpr2 parent;
+            private readonly SymbolTable symbolTable;
+            private readonly EnvDescTypesOnly2 envDesc;
+
+            private readonly Lazy<TypeKey> classKey;
+            private readonly Lazy<ConstructorKey> constructorKey;
+            private readonly Lazy<MethodKey> methodKey;
+            private readonly Lazy<ImmutableList<FieldKey>> fieldKeys;
+            private readonly Lazy<TypeReference> methodReturnType;
+            private readonly Lazy<EnvDescTypesOnly2> innerEnvDesc;
+            private readonly Lazy<CompletedTypeKey> completedClassKey;
+
+            public CompileStepInfo(LambdaExpr2 parent, SymbolTable symbolTable, EnvDescTypesOnly2 envDesc)
+            {
+                this.parent = parent;
+                this.symbolTable = symbolTable;
+                this.envDesc = envDesc;
+
+                this.classKey = new Lazy<TypeKey>(MakeClassKey, false);
+                this.constructorKey = new Lazy<ConstructorKey>(MakeConstructorKey, false);
+                this.methodKey = new Lazy<MethodKey>(MakeMethodKey, false);
+                this.fieldKeys = new Lazy<ImmutableList<FieldKey>>(MakeFieldKeys, false);
+                this.methodReturnType = new Lazy<TypeReference>(MakeReturnType, false);
+                this.innerEnvDesc = new Lazy<EnvDescTypesOnly2>(MakeInnerEnvDesc, false);
+                this.completedClassKey = new Lazy<CompletedTypeKey>(MakeCompletedClassKey, false);
+            }
+
+            public SymbolTable SymbolTable { get { return symbolTable; } }
+
+            private TypeKey MakeClassKey()
+            {
+                return new TypeKey(parent.lambdaObjTypeName);
+            }
+
+            public TypeKey ClassKey { get { return classKey.Value; } }
+
+            private CompletedTypeKey MakeCompletedClassKey()
+            {
+                return new CompletedTypeKey(parent.lambdaObjTypeName);
+            }
+
+            public CompletedTypeKey CompletedClassKey { get { return completedClassKey.Value; } }
+
+            private ConstructorKey MakeConstructorKey()
+            {
+                EnvSpec e = parent.body.GetEnvSpec() - parent.parameters.Select(x => x.Name);
+                Symbol[] capturedVars = e.Keys.ToArray();
+
+                ImmutableList<TypeReference> constructorParams = capturedVars.Select(s => PascalesqueExtensions.MakeBoxedType(envDesc[s])).ToImmutableList();
+
+                return new ConstructorKey(classKey.Value, constructorParams);
+            }
+
+            public ConstructorKey ConstructorKey { get { return constructorKey.Value; } }
+
+            private TypeReference MakeReturnType()
+            {
+                return parent.GetReturnType(symbolTable, envDesc);
+            }
+
+            public TypeReference MethodReturnType { get { return methodReturnType.Value; } }
+
+            private MethodKey MakeMethodKey()
+            {
+                return new MethodKey(classKey.Value, "Invoke", true, parent.parameters.Select(x => x.ParamType).ToImmutableList());
+            }
+
+            public MethodKey MethodKey { get { return methodKey.Value; } }
+
+            public Symbol ClassName { get { return parent.lambdaObjTypeName; } }
+
+            private ImmutableList<FieldKey> MakeFieldKeys()
+            {
+                ConstructorKey c = constructorKey.Value;
+                int iEnd = c.Parameters.Count;
+                ImmutableList<FieldKey> farr = ImmutableList<FieldKey>.Empty;
+                for (int i = 0; i < iEnd; ++i)
+                {
+                    farr = farr.Add(new FieldKey(classKey.Value, Symbol.Gensym(), c.Parameters[i]));
+                }
+                return farr;
+            }
+
+            public ImmutableList<FieldKey> FieldKeys { get { return fieldKeys.Value; } }
+
+            private EnvDescTypesOnly2 MakeInnerEnvDesc()
+            {
+                return EnvDescTypesOnly2.Shadow(envDesc, parent.parameters.Select(x => new ParamInfo(x.Name, x.ParamType)));
+            }
+
+            public EnvDescTypesOnly2 InnerEnvDesc { get { return innerEnvDesc.Value; } }
+
+            public ImmutableList<ParamInfo> Parameters { get { return parent.parameters; } }
+
+            public Expression2 Body { get { return parent.body; } }
+        }
+
+        private sealed class MakeClass : ICompileStep
+        {
+            private readonly CompileStepInfo info;
+
+            public MakeClass(CompileStepInfo info)
+            {
+                this.info = info;
+            }
+
+            #region ICompileStep Members
+
+            public int Phase
+            {
+                get { return 1; }
+            }
+
+            public ImmutableSortedSet<ItemKey> Inputs
+            {
+                get { return ImmutableSortedSet<ItemKey>.Empty; }
+            }
+
+            public ImmutableSortedSet<ItemKey> Outputs
+            {
+                get { return ImmutableSortedSet<ItemKey>.Empty.Add(info.ClassKey); }
+            }
+
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
+            {
+                TypeKey t = info.ClassKey;
+                TypeBuilder tyb = mb.DefineType(info.ClassName.SymbolName(), TypeAttributes.Public);
+                vars[t].Value = tyb;
+            }
+
+            #endregion
+        }
+
+        private sealed class MakeConstructor : ICompileStep
+        {
+            private readonly CompileStepInfo info;
+
+            public MakeConstructor(CompileStepInfo info)
+            {
+                this.info = info;
+            }
+
+            #region ICompileStep Members
+
+            public int Phase
+            {
+                get { return 1; }
+            }
+
+            public ImmutableSortedSet<ItemKey> Inputs
+            {
+                get
+                {
+                    return info.ConstructorKey.Parameters.Select(x => x.GetReferences()).UnionAll().Add(info.ClassKey);
+                }
+            }
+
+            public ImmutableSortedSet<ItemKey> Outputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.ConstructorKey);
+                }
+            }
+
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
+            {
+                TypeBuilder t = (TypeBuilder)(vars[info.ClassKey].Value);
+                ConstructorBuilder cb = t.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, info.ConstructorKey.Parameters.Select(x => x.Resolve(vars)).ToArray());
+                vars[info.ConstructorKey].Value = cb;
+            }
+
+            #endregion
+        }
+
+        private sealed class MakeField : ICompileStep
+        {
+            private readonly CompileStepInfo info;
+            private readonly int fieldIndex;
+
+            public MakeField(CompileStepInfo info, int fieldIndex)
+            {
+                this.info = info;
+                this.fieldIndex = fieldIndex;
+            }
+
+            #region ICompileStep Members
+
+            public int Phase { get { return 1; } }
+
+            public ImmutableSortedSet<ItemKey> Inputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.ClassKey);
+                }
+            }
+
+            public ImmutableSortedSet<ItemKey> Outputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.FieldKeys[fieldIndex]);
+                }
+            }
+
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
+            {
+                TypeBuilder tyb = (TypeBuilder)(vars[info.ClassKey].Value);
+                FieldKey fk = info.FieldKeys[fieldIndex];
+                FieldBuilder fb = tyb.DefineField(fk.Name.SymbolName(), fk.FieldType.Resolve(vars), FieldAttributes.Private);
+                vars[fk].Value = fb;
+            }
+
+            #endregion
+        }
+
+        private sealed class MakeInvokeMethod : ICompileStep
+        {
+            private readonly CompileStepInfo info;
+
+            public MakeInvokeMethod(CompileStepInfo info)
+            {
+                this.info = info;
+            }
+
+            #region ICompileStep Members
+
+            public int Phase { get { return 1; } }
+
+            public ImmutableSortedSet<ItemKey> Inputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.ClassKey).Union(info.MethodReturnType.GetReferences());
+                }
+            }
+
+            public ImmutableSortedSet<ItemKey> Outputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.MethodKey);
+                }
+            }
+
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
+            {
+                TypeBuilder tyb = (TypeBuilder)(vars[info.ClassKey].Value);
+                MethodKey mk = info.MethodKey;
+                TypeReference returnType = info.MethodReturnType;
+                MethodBuilder meb = tyb.DefineMethod(mk.Name.SymbolName(), MethodAttributes.Public, returnType.Resolve(vars), mk.Parameters.Select(x => x.Resolve(vars)).ToArray());
+                vars[mk].Value = meb;
+            }
+
+            #endregion
+        }
+
+        private sealed class MakeConstructorBody : ICompileStep
+        {
+            private readonly CompileStepInfo info;
+
+            public MakeConstructorBody(CompileStepInfo info)
+            {
+                this.info = info;
+            }
+
+            #region ICompileStep Members
+
+            public int Phase { get { return 1; } }
+
+            public ImmutableSortedSet<ItemKey> Inputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.ConstructorKey).Union(info.FieldKeys);
+                }
+            }
+
+            public ImmutableSortedSet<ItemKey> Outputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty;
+                }
+            }
+
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
+            {
+                ConstructorBuilder cb = (ConstructorBuilder)(vars[info.ConstructorKey].Value);
+                FieldBuilder[] lambdaFields = info.FieldKeys.Select(x => vars[x].Value).Cast<FieldBuilder>().ToArray();
+
+                ILGenerator cilg = cb.GetILGenerator();
+                int iEnd = lambdaFields.Length;
+
+                cilg.LoadArg(0);
+                cilg.Call(typeof(object).GetConstructor(Type.EmptyTypes).AssertNotNull());
+
+                for (int i = 0; i < iEnd; ++i)
+                {
+                    cilg.LoadArg(0);
+                    cilg.LoadArg(i + 1);
+                    cilg.StoreField(lambdaFields[i]);
+                }
+
+                cilg.Return();
+            }
+
+            #endregion
+        }
+
+        private sealed class MakeInvokeMethodBody : ICompileStep
+        {
+            private readonly CompileStepInfo info;
+
+            public MakeInvokeMethodBody(CompileStepInfo info)
+            {
+                this.info = info;
+            }
+
+            #region ICompileStep Members
+
+            public int Phase { get { return 1; } }
+
+            public ImmutableSortedSet<ItemKey> Inputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.ClassKey)
+                        .Add(info.MethodKey)
+                        .Union(info.FieldKeys)
+                        .Union(info.Body.GetReferences(info.SymbolTable, info.ClassKey, info.InnerEnvDesc));
+                }
+            }
+
+            public ImmutableSortedSet<ItemKey> Outputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty;
+                }
+            }
+
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
+            {
+                TypeBuilder lambdaObj = (TypeBuilder)(vars[info.ClassKey].Value);
+                MethodBuilder meb = (MethodBuilder)(vars[info.MethodKey].Value);
+                FieldBuilder[] lambdaFields = info.FieldKeys.Select(x => vars[x].Value).Cast<FieldBuilder>().ToArray();
+                Symbol[] capturedVars = info.FieldKeys.Select(x => x.Name).ToArray();
+                TypeReference lambdaObjRef = new TypeKeyReference(info.ClassKey);
+                EnvDescTypesOnly2 innerEnvDesc = info.InnerEnvDesc;
+
+                int iEnd = lambdaFields.Length;
+                List<Tuple<Symbol, IVarDesc2>> innerVars = new List<Tuple<Symbol, IVarDesc2>>();
+
+                for (int i = 0; i < iEnd; ++i)
+                {
+                    innerVars.Add(new Tuple<Symbol, IVarDesc2>(capturedVars[i], new FieldVarDesc2(new ArgVarDesc2(lambdaObjRef, false, 0), lambdaFields[i], innerEnvDesc[capturedVars[i]], true)));
+                }
+                int jEnd = info.Parameters.Count;
+                for (int j = 0; j < jEnd; ++j)
+                {
+                    innerVars.Add(new Tuple<Symbol, IVarDesc2>(info.Parameters[j].Name, new ArgVarDesc2(info.Parameters[j].ParamType, false, j + 1)));
+                }
+
+                ILGenerator milg = meb.GetILGenerator();
+
+                EnvDesc2 innerEnvDesc2 = EnvDesc2.FromSequence(innerVars);
+
+                CompileContext2 cc2 = new CompileContext2(milg, false);
+
+                info.Body.Compile(info.SymbolTable, info.ClassKey, cc2, innerEnvDesc2, vars, true);
+            }
+
+            #endregion
+        }
+
+        private sealed class BakeClass : ICompileStep
+        {
+            private readonly CompileStepInfo info;
+
+            public BakeClass(CompileStepInfo info)
+            {
+                this.info = info;
+            }
+
+            #region ICompileStep Members
+
+            public int Phase
+            {
+                get { return 2; }
+            }
+
+            public ImmutableSortedSet<ItemKey> Inputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.ClassKey).Add(info.ConstructorKey);
+                }
+            }
+
+            public ImmutableSortedSet<ItemKey> Outputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.CompletedClassKey);
+                }
+            }
+
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
+            {
+                TypeBuilder tyb = (TypeBuilder)(vars[info.ClassKey].Value);
+
+#if NETSTANDARD2_0
+                Type t = (Type)tyb.CreateTypeInfo();
+#else
+                Type t = tyb.CreateType();
+#endif
+
+                vars[info.CompletedClassKey].Value = t;
+            }
+
+#endregion
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            CompileStepInfo info = new CompileStepInfo(this, s, envDesc);
+
+            EnvDescTypesOnly2 innerEnvDesc = EnvDescTypesOnly2.Shadow(envDesc, parameters.Select(x => new ParamInfo(x.Name, x.ParamType)));
+
+            return ImmutableList<ICompileStep>.Empty
+                .Add(new MakeClass(info))
+                .Add(new MakeConstructor(info))
+                .Add(new MakeInvokeMethod(info))
+                .AddRange(Enumerable.Range(0, info.FieldKeys.Count).Select(i => new MakeField(info, i)))
+                .Add(new MakeConstructorBody(info))
+                .Add(new MakeInvokeMethodBody(info))
+                .AddRange(body.GetCompileSteps(s, new TypeKey(lambdaObjTypeName), innerEnvDesc))
+                .Add(new BakeClass(info));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            ImmutableSortedSet<ItemKey> h = ImmutableSortedSet<ItemKey>.Empty;
+            EnvDescTypesOnly2 innerEnvDesc = EnvDescTypesOnly2.Shadow(envDesc, parameters.Select(x => new ParamInfo(x.Name, x.ParamType)));
+            h = h.Union(body.GetReferences(s, new TypeKey(lambdaObjTypeName), innerEnvDesc));
+            h = h.Union(GetReturnType(s, envDesc).GetReferences());
+
+            CompileStepInfo csi = new CompileStepInfo(this, s, envDesc);
+            h = h.Add(csi.ClassKey);
+            h = h.Add(csi.ConstructorKey);
+            h = h.Add(csi.MethodKey);
+
+            return h;
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            CompileStepInfo info = new CompileStepInfo(this, s, envDesc.TypesOnly());
+
+            TypeBuilder lambdaObjType = (TypeBuilder)(references[info.ClassKey].Value);
+            ConstructorBuilder constructor = (ConstructorBuilder)(references[info.ConstructorKey].Value);
+            MethodBuilder invokeMethod = (MethodBuilder)(references[info.MethodKey].Value);
+
+            Symbol[] capturedVars = info.FieldKeys.Select(x => x.Name).ToArray();
+            int iEnd = capturedVars.Length;
+
+            ILGenerator ilg = cc.ILGenerator;
+            for (int i = 0; i < iEnd; ++i)
+            {
+                envDesc[capturedVars[i]].FetchBox(cc, references, false);
+            }
+
+            ilg.NewObj(constructor);
+
+            ilg.LoadFunction(invokeMethod);
+
+            TypeReference dTypeRef = GetReturnType(s, envDesc.TypesOnly());
+            Type dType = dTypeRef.Resolve(references);
+
+            ConstructorInfo[] dci = dType.GetConstructors();
+
+            ilg.NewObj(dType.GetConstructor(new Type[] { typeof(object), typeof(IntPtr) }).AssertNotNull());
+            if (tail) ilg.Return();
+        }
+    }
+
+    [Record]
+    public sealed class InvokeExpr2 : Expression2
+    {
+        private readonly Expression2 func;
+        private readonly ImmutableList<Expression2> args;
+
+        public InvokeExpr2(Expression2 func, ImmutableList<Expression2> args)
+        {
+            this.func = func;
+            this.args = args;
+        }
+
+        [Bind("func")]
+        public Expression2 Func => func;
+
+        [Bind("args")]
+        public ImmutableList<Expression2> Args => args;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            EnvSpec e = func.GetEnvSpec();
+            foreach (Expression2 arg in args)
+            {
+                e |= arg.GetEnvSpec();
+            }
+            return e;
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference funcType = func.GetReturnType(s, envDesc);
+
+            if (!(funcType.IsDelegate)) throw new PascalesqueException("Invocation of a non-delegate");
+
+            TypeReference[] p = funcType.GetDelegateParameterTypes();
+            if (p.Length != args.Count) throw new PascalesqueException("Argument count doesn't match parameter count");
+
+            int iEnd = p.Length;
+            for (int i = 0; i < iEnd; ++i)
+            {
+                if (p[i] != args[i].GetReturnType(s, envDesc)) throw new PascalesqueException("Argument " + i + " type doesn't match parameter type");
+            }
+
+            return funcType.GetDelegateReturnType();
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return func.GetCompileSteps(s, owner, envDesc)
+                .AddRange(args.SelectMany(arg => arg.GetCompileSteps(s, owner, envDesc)));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return func.GetReferences(s, owner, envDesc).Union(args.Select(x => x.GetReferences(s, owner, envDesc)).UnionAll());
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            TypeReference funcType = func.GetReturnType(s, envDesc.TypesOnly());
+
+            func.Compile(s, owner, cc, envDesc, references, false);
+            foreach (Expression2 arg in args)
+            {
+                arg.Compile(s, owner, cc, envDesc, references, false);
+            }
+            ILGenerator ilg = cc.ILGenerator;
+            if (tail) ilg.Tail();
+            ilg.CallVirt(funcType.Resolve(references).GetMethod("Invoke").AssertNotNull());
+            if (tail) ilg.Return();
+        }
+    }
 }

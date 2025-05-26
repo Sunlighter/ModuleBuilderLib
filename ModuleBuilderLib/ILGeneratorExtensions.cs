@@ -11,7 +11,6 @@ namespace Sunlighter.ModuleBuilderLib
         Four
     }
 
-    [Obsolete]
     public static partial class ILGExtensions
     {
         #region ILGenerator Extension Methods

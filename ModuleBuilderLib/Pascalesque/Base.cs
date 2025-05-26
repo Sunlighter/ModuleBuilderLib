@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
 using System.Text;
 using System.Threading;
 
@@ -24,6 +26,53 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
           System.Runtime.Serialization.StreamingContext context)
             : base(info, context) { }
     }
+
+    public static class ExtMethods
+    {
+        public static bool HasDuplicates<T>(this IEnumerable<T> items)
+        {
+            HashSet<T> h = new HashSet<T>();
+            foreach (T item in items)
+            {
+                if (h.Contains(item)) return true;
+                h.Add(item);
+            }
+            return false;
+        }
+
+        public static IEnumerable<T> AndAlso<T>(this IEnumerable<T> items, T another)
+        {
+            foreach (T item in items)
+            {
+                yield return item;
+            }
+            yield return another;
+        }
+
+        public static HashSet<T> ToHashSet<T>(this IEnumerable<T> items)
+        {
+            HashSet<T> h = new HashSet<T>();
+            h.UnionWith(items);
+            return h;
+        }
+
+        public static T Last<T>(this List<T> list)
+        {
+            if (list.Count == 0) throw new IndexOutOfRangeException();
+            return list[list.Count - 1];
+        }
+
+        public static EnvSpec EnvSpecUnion(this IEnumerable<EnvSpec> envSpecs)
+        {
+            EnvSpec e = EnvSpec.Empty();
+            foreach (EnvSpec i in envSpecs)
+            {
+                e |= i;
+            }
+            return e;
+        }
+    }
+
 
     public readonly struct VarSpec
     {
