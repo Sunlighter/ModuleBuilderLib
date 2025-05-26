@@ -138,20 +138,6 @@ namespace Sunlighter.ModuleBuilderLib
 
     public static partial class Extensions
     {
-        public static string Concatenate(this IEnumerable<string> strings, string delimiter)
-        {
-            StringBuilder sb = new StringBuilder();
-            bool needDelim = false;
-            foreach (string str in strings)
-            {
-                if (needDelim) sb.Append(delimiter);
-                sb.Append(str);
-                needDelim = true;
-            }
-            return sb.ToString();
-        }
-
-        [Obsolete]
         public static ImmutableSortedSet<T> UnionAll<T>(this IEnumerable<ImmutableSortedSet<T>> sets)
         {
             ImmutableSortedSet<T> result = ImmutableSortedSet<T>.Empty;
