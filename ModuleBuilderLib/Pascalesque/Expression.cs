@@ -3705,4 +3705,535 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
             if (tail) ilg.Return();
         }
     }
+
+    [Record]
+    public sealed class MemCpyExpr2 : Expression2
+    {
+        private readonly Expression2 destAddr;
+        private readonly Expression2 srcAddr;
+        private readonly Expression2 count;
+
+        public MemCpyExpr2(Expression2 destAddr, Expression2 srcAddr, Expression2 count)
+        {
+            this.destAddr = destAddr;
+            this.srcAddr = srcAddr;
+            this.count = count;
+        }
+
+        [Bind("destAddr")]
+        public Expression2 DestAddr => destAddr;
+
+        [Bind("srcAddr")]
+        public Expression2 SrcAddr => srcAddr;
+
+        [Bind("count")]
+        public Expression2 Count => count;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return destAddr.GetEnvSpec() | srcAddr.GetEnvSpec() | count.GetEnvSpec();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference destAddrType = destAddr.GetReturnType(s, envDesc);
+            TypeReference srcAddrType = srcAddr.GetReturnType(s, envDesc);
+            TypeReference countType = count.GetReturnType(s, envDesc);
+
+            if (destAddrType != ExistingTypeReference.IntPtr && destAddrType != ExistingTypeReference.UIntPtr) throw new PascalesqueException("memcpy dest address must be IntPtr or UIntPtr");
+            if (srcAddrType != ExistingTypeReference.IntPtr && srcAddrType != ExistingTypeReference.UIntPtr) throw new PascalesqueException("memcpy source address must be IntPtr or UIntPtr");
+            if (countType != ExistingTypeReference.UInt32) throw new PascalesqueException("memcpy count must be uint");
+
+            return ExistingTypeReference.Void;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return destAddr.GetCompileSteps(s, owner, envDesc)
+                .AddRange(srcAddr.GetCompileSteps(s, owner, envDesc))
+                .AddRange(count.GetCompileSteps(s, owner, envDesc));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return destAddr.GetReferences(s, owner, envDesc).Union(srcAddr.GetReferences(s, owner, envDesc)).Union(count.GetReferences(s, owner, envDesc));
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            destAddr.Compile(s, owner, cc, envDesc, references, false);
+            srcAddr.Compile(s, owner, cc, envDesc, references, false);
+            count.Compile(s, owner, cc, envDesc, references, false);
+            cc.ILGenerator.Unaligned(Alignment.One);
+            cc.ILGenerator.Emit(OpCodes.Cpblk);
+            if (tail) cc.ILGenerator.Return();
+        }
+    }
+
+    [Record]
+    public sealed class MemSetExpr2 : Expression2
+    {
+        private readonly Expression2 destAddr;
+        private readonly Expression2 fillValue;
+        private readonly Expression2 count;
+
+        public MemSetExpr2(Expression2 destAddr, Expression2 fillValue, Expression2 count)
+        {
+            this.destAddr = destAddr;
+            this.fillValue = fillValue;
+            this.count = count;
+        }
+
+        [Bind("destAddr")]
+        public Expression2 DestAddr => destAddr;
+
+        [Bind("fillValue")]
+        public Expression2 FillValue => fillValue;
+
+        [Bind("count")]
+        public Expression2 Count => count;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return destAddr.GetEnvSpec() | fillValue.GetEnvSpec() | count.GetEnvSpec();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference destAddrType = destAddr.GetReturnType(s, envDesc);
+            TypeReference fillValueType = fillValue.GetReturnType(s, envDesc);
+            TypeReference countType = count.GetReturnType(s, envDesc);
+
+            if (destAddrType != ExistingTypeReference.IntPtr && destAddrType != ExistingTypeReference.UIntPtr) throw new PascalesqueException("memset dest address must be IntPtr or UIntPtr");
+            if (fillValueType != ExistingTypeReference.Byte && fillValueType != ExistingTypeReference.SByte) throw new PascalesqueException("memset fillValue must be byte or sbyte");
+            if (countType != ExistingTypeReference.UInt32) throw new PascalesqueException("memset count must be uint");
+
+            return ExistingTypeReference.Void;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return destAddr.GetCompileSteps(s, owner, envDesc)
+                .AddRange(fillValue.GetCompileSteps(s, owner, envDesc))
+                .AddRange(count.GetCompileSteps(s, owner, envDesc));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return destAddr.GetReferences(s, owner, envDesc).Union(fillValue.GetReferences(s, owner, envDesc)).Union(count.GetReferences(s, owner, envDesc));
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            destAddr.Compile(s, owner, cc, envDesc, references, false);
+            fillValue.Compile(s, owner, cc, envDesc, references, false);
+            count.Compile(s, owner, cc, envDesc, references, false);
+            cc.ILGenerator.Unaligned(Alignment.One);
+            cc.ILGenerator.Emit(OpCodes.Initblk);
+            if (tail) cc.ILGenerator.Return();
+        }
+    }
+
+    [Record]
+    public sealed class PinClause2
+    {
+        private readonly Symbol name;
+        private readonly Expression2 val;
+
+        public PinClause2(Symbol name, Expression2 val)
+        {
+            this.name = name;
+            this.val = val;
+        }
+
+        [Bind("name")]
+        public Symbol Name { get { return name; } }
+
+        [Bind("val")]
+        public Expression2 Value { get { return val; } }
+    }
+
+    [Record]
+    public sealed class PinExpr2 : Expression2
+    {
+        private readonly ImmutableList<PinClause2> clauses;
+        private readonly Expression2 body;
+        private readonly Symbol innerMethodName;
+
+        public PinExpr2(ImmutableList<PinClause2> clauses, Expression2 body)
+        {
+            this.clauses = clauses;
+            this.body = body;
+            this.innerMethodName = Symbol.Gensym();
+        }
+
+        [Bind("clauses")]
+        public ImmutableList<PinClause2> Clauses => clauses;
+
+        [Bind("body")]
+        public Expression2 Body => body;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            EnvSpec e = body.GetEnvSpec() - clauses.Select(x => x.Name);
+            e = EnvSpec.CaptureAll(e);
+            foreach (PinClause2 lc in clauses)
+            {
+                e |= lc.Value.GetEnvSpec();
+            }
+            return e;
+        }
+
+        private static readonly TypeReference[] okTypes = new TypeReference[]
+        {
+            ExistingTypeReference.Byte,
+            ExistingTypeReference.Int16,
+            ExistingTypeReference.Int32,
+            ExistingTypeReference.Int64,
+            ExistingTypeReference.IntPtr,
+            ExistingTypeReference.SByte,
+            ExistingTypeReference.UInt16,
+            ExistingTypeReference.UInt32,
+            ExistingTypeReference.UInt64,
+            ExistingTypeReference.UIntPtr,
+            ExistingTypeReference.Single,
+            ExistingTypeReference.Double
+        };
+
+        private static bool IsOkArrayType(TypeReference t)
+        {
+            return t.IsArray && okTypes.Contains(t.GetElementType());
+        }
+
+        private EnvDescTypesOnly2 MakeInnerEnvDesc(EnvDescTypesOnly2 outerEnvDesc)
+        {
+            return EnvDescTypesOnly2.Shadow(outerEnvDesc, clauses.Select(x => new ParamInfo(x.Name, ExistingTypeReference.IntPtr)));
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            if (clauses.Select(x => x.Name).HasDuplicates()) throw new PascalesqueException("pin has two variables with the same name");
+            if (clauses.Any(x => !IsOkArrayType(x.Value.GetReturnType(s, envDesc)))) throw new PascalesqueException("attempt to pin impossible type");
+
+            EnvDescTypesOnly2 e2 = MakeInnerEnvDesc(envDesc);
+
+            return body.GetReturnType(s, e2);
+        }
+
+        private class CompileStepInfo
+        {
+            private readonly PinExpr2 parent;
+            private readonly SymbolTable symbolTable;
+            private readonly TypeKey owner;
+            private readonly EnvDescTypesOnly2 envDesc;
+
+            private readonly Lazy<EnvDescTypesOnly2> innerEnvDesc;
+            private readonly Lazy<TypeReference> returnType;
+            private readonly Lazy<EnvSpec> capturedEnvSpec;
+            private readonly Lazy<ImmutableList<Symbol>> capturedVars;
+            private readonly Lazy<ImmutableList<TypeReference>> arrayToPinTypes;
+            private readonly Lazy<ImmutableList<TypeReference>> captures;
+            private readonly Lazy<ImmutableList<TypeReference>> paramTypes;
+            private readonly Lazy<MethodKey> innerMethod;
+
+            public CompileStepInfo(PinExpr2 parent, SymbolTable symbolTable, TypeKey owner, EnvDescTypesOnly2 envDesc)
+            {
+                this.parent = parent;
+                this.symbolTable = symbolTable;
+                this.owner = owner;
+                this.envDesc = envDesc;
+
+                this.innerEnvDesc = new Lazy<EnvDescTypesOnly2>(() => parent.MakeInnerEnvDesc(envDesc), false);
+                this.returnType = new Lazy<TypeReference>(() => parent.body.GetReturnType(symbolTable, InnerEnvDesc), false);
+                this.capturedEnvSpec = new Lazy<EnvSpec>(GetCapturedEnvSpec, false);
+                this.capturedVars = new Lazy<ImmutableList<Symbol>>(GetCapturedVars, false);
+                this.arrayToPinTypes = new Lazy<ImmutableList<TypeReference>>(GetArrayToPinTypes, false);
+                this.captures = new Lazy<ImmutableList<TypeReference>>(GetCaptures, false);
+                this.paramTypes = new Lazy<ImmutableList<TypeReference>>(GetParamTypes, false);
+                this.innerMethod = new Lazy<MethodKey>(GetInnerMethod, false);
+            }
+
+            private EnvSpec GetCapturedEnvSpec()
+            {
+                EnvSpec e = parent.body.GetEnvSpec() - parent.clauses.Select(x => x.Name);
+                e = EnvSpec.CaptureAll(e);
+                return e;
+            }
+
+            private ImmutableList<Symbol> GetCapturedVars()
+            {
+                return CapturedEnvSpec.Keys.ToImmutableList();
+            }
+
+            private ImmutableList<TypeReference> GetArrayToPinTypes()
+            {
+                return parent.clauses.Select(x => x.Value.GetReturnType(symbolTable, envDesc)).ToImmutableList();
+            }
+
+            private ImmutableList<TypeReference> GetCaptures()
+            {
+                return CapturedVars.Select(s => PascalesqueExtensions.MakeBoxedType(envDesc[s])).ToImmutableList();
+            }
+
+            private ImmutableList<TypeReference> GetParamTypes()
+            {
+                return Captures.AddRange(ArrayToPinTypes);
+            }
+
+            private MethodKey GetInnerMethod()
+            {
+                return new MethodKey(owner, parent.innerMethodName, false, ParamTypes);
+            }
+
+            public PinExpr2 Parent { get { return parent; } }
+
+            public SymbolTable SymbolTable { get { return symbolTable; } }
+
+            public TypeKey Owner { get { return owner; } }
+
+            public EnvDescTypesOnly2 EnvDesc { get { return envDesc; } }
+
+            public EnvDescTypesOnly2 InnerEnvDesc { get { return innerEnvDesc.Value; } }
+
+            public TypeReference ReturnType { get { return returnType.Value; } }
+
+            public EnvSpec CapturedEnvSpec { get { return capturedEnvSpec.Value; } }
+
+            public ImmutableList<Symbol> CapturedVars { get { return capturedVars.Value; } }
+
+            public ImmutableList<TypeReference> ArrayToPinTypes { get { return arrayToPinTypes.Value; } }
+
+            public ImmutableList<TypeReference> Captures { get { return captures.Value; } }
+
+            public ImmutableList<TypeReference> ParamTypes { get { return paramTypes.Value; } }
+
+            public MethodKey InnerMethod { get { return innerMethod.Value; } }
+        }
+
+        private sealed class MakeMethod : ICompileStep
+        {
+            private readonly CompileStepInfo info;
+
+            public MakeMethod(CompileStepInfo info)
+            {
+                this.info = info;
+            }
+
+            #region ICompileStep Members
+
+            public int Phase
+            {
+                get { return 1; }
+            }
+
+            public ImmutableSortedSet<ItemKey> Inputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.Owner)
+                        .Union(info.ReturnType.GetReferences())
+                        .Union(info.InnerMethod.Parameters.Select(x => x.GetReferences()).UnionAll());
+                }
+            }
+
+            public ImmutableSortedSet<ItemKey> Outputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.InnerMethod);
+                }
+            }
+
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
+            {
+                TypeBuilder t = (TypeBuilder)(vars[info.Owner].Value);
+                MethodBuilder m = t.DefineMethod
+                (
+                    info.InnerMethod.Name.SymbolName(),
+                    MethodAttributes.Private | MethodAttributes.Static,
+                    info.SymbolTable[info.InnerMethod].ReturnType.Resolve(vars),
+                    info.InnerMethod.Parameters.Select(x => x.Resolve(vars)).ToArray()
+                );
+                vars[info.InnerMethod].Value = m;
+            }
+
+            #endregion
+        }
+
+        private sealed class MakeMethodBody : ICompileStep
+        {
+            private readonly CompileStepInfo info;
+
+            public MakeMethodBody(CompileStepInfo info)
+            {
+                this.info = info;
+            }
+
+            #region ICompileStep Members
+
+            public int Phase
+            {
+                get { return 1; }
+            }
+
+            public ImmutableSortedSet<ItemKey> Inputs
+            {
+                get
+                {
+                    return ImmutableSortedSet<ItemKey>.Empty.Add(info.InnerMethod)
+                        .Add(info.Owner)
+                        .Union(info.Parent.body.GetReferences(info.SymbolTable, info.Owner, info.InnerEnvDesc));
+                }
+            }
+
+            public ImmutableSortedSet<ItemKey> Outputs => ImmutableSortedSet<ItemKey>.Empty;
+
+            public void Compile(ModuleBuilder mb, ImmutableSortedDictionary<ItemKey, SaBox<object>> vars)
+            {
+                TypeBuilder t = (TypeBuilder)(vars[info.Owner].Value);
+                MethodBuilder m = (MethodBuilder)(vars[info.InnerMethod].Value);
+                ILGenerator milg = m.GetILGenerator();
+                CompileContext2 mcc = new CompileContext2(milg, false);
+
+                int iEnd = info.CapturedVars.Count;
+                List<Tuple<Symbol, IVarDesc2>> innerVars = new List<Tuple<Symbol, IVarDesc2>>();
+                for (int i = 0; i < iEnd; ++i)
+                {
+                    innerVars.Add(new Tuple<Symbol, IVarDesc2>(info.CapturedVars[i], new ArgVarDesc2(info.InnerEnvDesc[info.CapturedVars[i]], true, i)));
+                }
+
+                iEnd = info.Parent.clauses.Count;
+                for (int i = 0; i < iEnd; ++i)
+                {
+                    LocalBuilder lb_pin = milg.DeclareLocal(info.ArrayToPinTypes[i].GetElementType().Resolve(vars).MakeByRefType(), true);
+                    bool boxed = false;
+                    if (info.CapturedEnvSpec.ContainsKey(info.Parent.clauses[i].Name))
+                    {
+                        boxed = info.CapturedEnvSpec[info.Parent.clauses[i].Name].IsCaptured;
+                    }
+                    LocalBuilder lb_ptr = milg.DeclareLocal((boxed ? PascalesqueExtensions.MakeBoxedType(ExistingTypeReference.IntPtr) : ExistingTypeReference.IntPtr).Resolve(vars));
+
+                    milg.LoadArg(info.Captures.Count + i);
+                    milg.LoadInt(0);
+                    milg.LoadElementAddress(info.ArrayToPinTypes[i].GetElementType().Resolve(vars));
+                    milg.StoreLocal(lb_pin);
+                    if (boxed)
+                    {
+                        milg.NewObj(PascalesqueExtensions.MakeBoxedType(ExistingTypeReference.IntPtr).Resolve(vars).GetConstructor(Type.EmptyTypes).AssertNotNull());
+                        milg.StoreLocal(lb_ptr);
+                    }
+                    LocalVarDesc2 lvd = new LocalVarDesc2(ExistingTypeReference.IntPtr, boxed, lb_ptr.LocalIndex);
+                    lvd.Store(mcc, vars, delegate () { milg.LoadLocal(lb_pin); }, false);
+                    innerVars.Add(new Tuple<Symbol, IVarDesc2>(info.Parent.clauses[i].Name, lvd));
+                }
+
+                EnvDesc2 innerEnvDesc = EnvDesc2.FromSequence(innerVars);
+                // "body" is not in the tail position, because we don't want the variables to become unpinned until it finishes.
+                info.Parent.body.Compile(info.SymbolTable, info.Owner, mcc, innerEnvDesc, vars, false);
+                milg.Return();
+            }
+
+            #endregion
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            EnvDescTypesOnly2 e2 = MakeInnerEnvDesc(envDesc);
+            CompileStepInfo info = new CompileStepInfo(this, s, owner, envDesc);
+
+            return clauses.SelectMany(clause => clause.Value.GetCompileSteps(s, owner, envDesc)).ToImmutableList()
+                .AddRange(body.GetCompileSteps(s, owner, e2))
+                .Add(new MakeMethod(info))
+                .Add(new MakeMethodBody(info));
+
+            // TODO ??
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            ImmutableSortedSet<ItemKey> references = ImmutableSortedSet<ItemKey>.Empty;
+            foreach (PinClause2 clause in clauses)
+            {
+                references = references.Union(clause.Value.GetReferences(s, owner, envDesc));
+            }
+            EnvDescTypesOnly2 e2 = MakeInnerEnvDesc(envDesc);
+            references = references.Union(body.GetReferences(s, owner, e2));
+
+            CompileStepInfo info = new CompileStepInfo(this, s, owner, envDesc);
+            references = references.Add(info.InnerMethod);
+
+            return references;
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            CompileStepInfo info = new CompileStepInfo(this, s, owner, envDesc.TypesOnly());
+
+            ILGenerator ilg = cc.ILGenerator;
+            MethodBuilder mb = (MethodBuilder)(references[info.InnerMethod].Value);
+
+            int iEnd = info.CapturedVars.Count;
+            for (int i = 0; i < iEnd; ++i)
+            {
+                envDesc[info.CapturedVars[i]].FetchBox(cc, references, false);
+            }
+
+            iEnd = clauses.Count;
+            for (int i = 0; i < iEnd; ++i)
+            {
+                clauses[i].Value.Compile(s, owner, cc, envDesc, references, false);
+            }
+
+            if (tail) ilg.Tail();
+            ilg.Call(mb);
+            if (tail) ilg.Return();
+        }
+    }
+
+    [Record]
+    public sealed class ThrowExpr2 : Expression2
+    {
+        private readonly TypeReference typeNotReturned;
+        private readonly Expression2 body;
+
+        public ThrowExpr2(TypeReference typeNotReturned, Expression2 body)
+        {
+            this.typeNotReturned = typeNotReturned;
+            this.body = body;
+        }
+
+        [Bind("typeNotReturned")]
+        public TypeReference TypeNotReturned => typeNotReturned;
+
+        [Bind("body")]
+        public Expression2 Body => body;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return body.GetEnvSpec();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            //System.Diagnostics.Debug.Assert(typeof(Exception).IsAssignableFrom(body.GetReturnType(envDesc)));
+            return typeNotReturned;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return body.GetCompileSteps(s, owner, envDesc);
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return body.GetReferences(s, owner, envDesc);
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            body.Compile(s, owner, cc, envDesc, references, false);
+
+            cc.ILGenerator.Throw();
+        }
+    }
 }
