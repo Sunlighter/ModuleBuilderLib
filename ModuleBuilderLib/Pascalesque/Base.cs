@@ -73,7 +73,6 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
         }
     }
 
-
     public readonly struct VarSpec
     {
         private readonly bool isWritten;
@@ -275,4 +274,83 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
         }
     }
 
+    public enum BinaryOp
+    {
+        Add,
+        Sub,
+        Mul,
+        Div,
+        Rem,
+        And,
+        Or,
+        Xor,
+        Shl,
+        Shr,
+        Atan2,
+        IEEERemainder,
+        LogBase,
+        Max,
+        Min,
+        Pow,
+    }
+
+    public enum UnaryOp
+    {
+        Invert,
+        Negate,
+        Not,
+        Abs,
+        Acos,
+        Asin,
+        Atan,
+        Ceil,
+        Cos,
+        Cosh,
+        Exp,
+        Floor,
+        Log,
+        Log10,
+        Round,
+        Sign,
+        Sin,
+        Sinh,
+        Sqrt,
+        Tan,
+        Tanh,
+        Trunc
+    }
+
+    public enum ConvertTo
+    {
+        Byte,
+        Short,
+        Int,
+        Long,
+        IntPtr,
+        SByte,
+        UShort,
+        UInt,
+        ULong,
+        UIntPtr,
+        Float,
+        Double
+    }
+
+    public enum ActualStackType
+    {
+        Int32,
+        IntPtr,
+        Int64,
+        Float,
+    }
+
+    public enum Comparison
+    {
+        LessThan,
+        GreaterThan,
+        LessEqual,
+        GreaterEqual,
+        Equal,
+        NotEqual
+    }
 }

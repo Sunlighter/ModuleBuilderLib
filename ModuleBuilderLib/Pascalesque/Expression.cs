@@ -2360,4 +2360,634 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
             if (tail) ilg.Return();
         }
     }
+
+    [Record]
+    public sealed class BinaryOpExpr2 : Expression2
+    {
+        private readonly BinaryOp op;
+        private readonly Expression2 addend1;
+        private readonly Expression2 addend2;
+
+        public BinaryOpExpr2(BinaryOp op, Expression2 addend1, Expression2 addend2)
+        {
+            this.op = op;
+            this.addend1 = addend1;
+            this.addend2 = addend2;
+        }
+
+        [Bind("op")]
+        public BinaryOp Op => op;
+
+        [Bind("addend1")]
+        public Expression2 Addend1 => addend1;
+
+        [Bind("addend2")]
+        public Expression2 Addend2 => addend2;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return addend1.GetEnvSpec() | addend2.GetEnvSpec();
+        }
+
+        private static readonly BinaryOp[] opArray = new BinaryOp[]
+        {
+            BinaryOp.Atan2, BinaryOp.IEEERemainder, BinaryOp.LogBase,
+            BinaryOp.Max, BinaryOp.Min, BinaryOp.Pow
+        };
+
+        private static readonly string[] opName = new string[]
+        {
+            "Atan2", "IEEERemainder", "Log",
+            "Max", "Min", "Pow"
+        };
+
+        private static readonly Type[] opTypes = new Type[]
+        {
+            typeof(byte), typeof(short), typeof(int), typeof(long), typeof(IntPtr),
+            typeof(sbyte), typeof(ushort), typeof(uint), typeof(ulong), typeof(UIntPtr)
+        };
+
+        private static readonly BinaryOp[] opF = new BinaryOp[]
+        {
+            BinaryOp.Add, BinaryOp.Sub, BinaryOp.Mul, BinaryOp.Div
+        };
+
+        private static readonly Type[] opTypesF = new Type[]
+        {
+            typeof(byte), typeof(short), typeof(int), typeof(long), typeof(IntPtr),
+            typeof(sbyte), typeof(ushort), typeof(uint), typeof(ulong), typeof(UIntPtr),
+            typeof(float), typeof(double)
+        };
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference t1 = addend1.GetReturnType(s, envDesc);
+            TypeReference t2 = addend2.GetReturnType(s, envDesc);
+
+            if (!(t1 is ExistingTypeReference)) throw new PascalesqueException("Binary op on unsupported type");
+            if (!(t2 is ExistingTypeReference)) throw new PascalesqueException("Binary op on unsupported type");
+
+            ExistingTypeReference et1 = (ExistingTypeReference)t1;
+            ExistingTypeReference et2 = (ExistingTypeReference)t2;
+
+            if (op == BinaryOp.Shl || op == BinaryOp.Shr)
+            {
+                if (t2 != ExistingTypeReference.Int32 && t2 != ExistingTypeReference.IntPtr) throw new PascalesqueException("Shift amount must be int or IntPtr");
+            }
+            else if (opArray.Contains(op))
+            {
+
+                int index = Array.IndexOf<BinaryOp>(opArray, op);
+                System.Diagnostics.Debug.Assert(index >= 0 && index < opArray.Length);
+                MethodInfo mi = typeof(Math).GetMethod(opName[index], BindingFlags.Public | BindingFlags.Static, null, new Type[] { et1.ExistingType, et2.ExistingType }, null).AssertNotNull();
+                if (mi == null) throw new PascalesqueException("Unknown binary op / types");
+                return new ExistingTypeReference(mi.ReturnType);
+            }
+            else
+            {
+                if (t1 != t2) throw new PascalesqueException("Attempt to do binary op on two different types");
+
+                Type[] opTypes1 = (opF.Any(x => x == op)) ? opTypesF : opTypes;
+
+                if (!opTypes1.Any(x => x == et1.ExistingType)) throw new PascalesqueException("Attempt to do a binary op on an unsupported type");
+            }
+
+            return t1;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return addend1.GetCompileSteps(s, owner, envDesc).AddRange(addend2.GetCompileSteps(s, owner, envDesc));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return addend1.GetReferences(s, owner, envDesc).Union(addend2.GetReferences(s, owner, envDesc));
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            EnvDescTypesOnly2 edto = envDesc.TypesOnly();
+            TypeReference t1 = addend1.GetReturnType(s, edto);
+            TypeReference t2 = addend2.GetReturnType(s, edto);
+
+            if (!(t1 is ExistingTypeReference)) throw new PascalesqueException("Binary op on unsupported type");
+            if (!(t2 is ExistingTypeReference)) throw new PascalesqueException("Binary op on unsupported type");
+
+            ExistingTypeReference et1 = (ExistingTypeReference)t1;
+            ExistingTypeReference et2 = (ExistingTypeReference)t2;
+
+            bool isUnsigned = (et1.ExistingType == typeof(byte) || et1.ExistingType == typeof(ushort) || et1.ExistingType == typeof(uint) || et1.ExistingType == typeof(ulong));
+
+            addend1.Compile(s, owner, cc, envDesc, references, false);
+            addend2.Compile(s, owner, cc, envDesc, references, false);
+            switch (op)
+            {
+                case BinaryOp.Add:
+                    ilg.Add();
+                    break;
+                case BinaryOp.Sub:
+                    ilg.Sub();
+                    break;
+                case BinaryOp.Mul:
+                    ilg.Mul();
+                    break;
+                case BinaryOp.Div:
+                    if (isUnsigned)
+                    {
+                        ilg.DivUn();
+                    }
+                    else
+                    {
+                        ilg.Div();
+                    }
+                    break;
+                case BinaryOp.Rem:
+                    if (isUnsigned)
+                    {
+                        ilg.RemUn();
+                    }
+                    else
+                    {
+                        ilg.Rem();
+                    }
+                    break;
+                case BinaryOp.And:
+                    ilg.And();
+                    break;
+                case BinaryOp.Or:
+                    ilg.Or();
+                    break;
+                case BinaryOp.Xor:
+                    ilg.Xor();
+                    break;
+                case BinaryOp.Shl:
+                    ilg.Shl();
+                    break;
+                case BinaryOp.Shr:
+                    if (isUnsigned)
+                    {
+                        ilg.ShrUn();
+                    }
+                    else
+                    {
+                        ilg.Shr();
+                    }
+                    break;
+                default:
+                    if (opArray.Contains(op))
+                    {
+                        int index = Array.IndexOf<BinaryOp>(opArray, op);
+                        System.Diagnostics.Debug.Assert(index >= 0 && index < opArray.Length);
+                        MethodInfo mi = typeof(Math).GetMethod(opName[index], BindingFlags.Public | BindingFlags.Static, null, new Type[] { et1.ExistingType, et2.ExistingType }, null).AssertNotNull();
+                        if (mi == null) throw new PascalesqueException("Unknown binary op / types");
+                        if (tail) ilg.Tail();
+                        ilg.Call(mi);
+                    }
+                    else
+                    {
+                        throw new PascalesqueException("Unknown binary op / type combination");
+                    }
+                    break;
+            }
+            if (tail) ilg.Return();
+        }
+    }
+
+    [Record]
+    public sealed class UnaryOpExpr2 : Expression2
+    {
+        private readonly UnaryOp op;
+        private readonly Expression2 expr;
+
+        public UnaryOpExpr2(UnaryOp op, Expression2 expr)
+        {
+            this.op = op;
+            this.expr = expr;
+        }
+
+        [Bind("op")]
+        public UnaryOp Op => op;
+
+        [Bind("expr")]
+        public Expression2 Expr => expr;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return expr.GetEnvSpec();
+        }
+
+        private static readonly UnaryOp[] opArray = new UnaryOp[]
+        {
+            UnaryOp.Abs, UnaryOp.Acos, UnaryOp.Asin, UnaryOp.Atan, UnaryOp.Ceil,
+            UnaryOp.Cos, UnaryOp.Cosh, UnaryOp.Exp, UnaryOp.Floor, UnaryOp.Log,
+            UnaryOp.Log10, UnaryOp.Round, UnaryOp.Sign, UnaryOp.Sin, UnaryOp.Sinh,
+            UnaryOp.Sqrt, UnaryOp.Tan, UnaryOp.Tanh, UnaryOp.Trunc
+        };
+
+        private static readonly string[] opName = new string[]
+        {
+            "Abs", "Acos", "Asin", "Atan", "Ceiling",
+            "Cos", "Cosh", "Exp", "Floor", "Log",
+            "Log10", "Round", "Sign", "Sin", "Sinh",
+            "Sqrt", "Tan", "Tanh", "Truncate"
+        };
+
+#if NETSTANDARD2_0
+        private static MethodInfo GetMathMethod(UnaryOp u, Type t)
+#else
+        private static MethodInfo? GetMathMethod(UnaryOp u, Type t)
+#endif
+        {
+            int index = Array.IndexOf<UnaryOp>(opArray, u);
+            if (index < 0 || index >= opArray.Length) return null;
+            return typeof(Math).GetMethod(opName[index], BindingFlags.Public | BindingFlags.Static, null, new Type[] { t }, null).AssertNotNull();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference t1 = expr.GetReturnType(s, envDesc);
+            if (!(t1 is ExistingTypeReference)) throw new PascalesqueException("Unsupported type for unary operation");
+            ExistingTypeReference et1 = (ExistingTypeReference)t1;
+            Type t = et1.ExistingType;
+
+            if (op == UnaryOp.Invert)
+            {
+                Type[] supportedTypes = new Type[]
+                {
+                    typeof(byte), typeof(ushort), typeof(uint), typeof(ulong), typeof(UIntPtr),
+                    typeof(sbyte), typeof(short), typeof(int), typeof(long), typeof(IntPtr)
+                };
+                if (!supportedTypes.Any(x => t == x)) throw new PascalesqueException("Unsupported type for invert");
+            }
+            else if (op == UnaryOp.Negate)
+            {
+                Type[] supportedTypes = new Type[]
+                {
+                    typeof(byte), typeof(ushort), typeof(uint), typeof(ulong), typeof(UIntPtr),
+                    typeof(sbyte), typeof(short), typeof(int), typeof(long), typeof(IntPtr)
+                };
+                if (!supportedTypes.Any(x => t == x)) throw new PascalesqueException("Unsupported type for negate");
+            }
+            else if (op == UnaryOp.Not)
+            {
+                Type[] supportedTypes = new Type[]
+                {
+                    typeof(byte), typeof(ushort), typeof(uint), typeof(ulong), typeof(UIntPtr),
+                    typeof(sbyte), typeof(short), typeof(int), typeof(long), typeof(IntPtr),
+                    typeof(bool)
+                };
+                if (!supportedTypes.Any(x => t == x)) throw new PascalesqueException("Unsupported type for not");
+                return ExistingTypeReference.Boolean;
+            }
+            else
+            {
+#if NETSTANDARD2_0
+                MethodInfo m = GetMathMethod(op, t);
+#else
+                MethodInfo? m = GetMathMethod(op, t);
+#endif
+                if (m == null) throw new PascalesqueException("Unknown UnaryOp / type");
+                return new ExistingTypeReference(m.ReturnType);
+            }
+            return t1;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return expr.GetCompileSteps(s, owner, envDesc);
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return expr.GetReferences(s, owner, envDesc);
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            Type exprType = expr.GetReturnType(s, envDesc.TypesOnly()).Resolve(references);
+
+            expr.Compile(s, owner, cc, envDesc, references, false);
+            switch (op)
+            {
+                case UnaryOp.Invert:
+                    ilg.Invert();
+                    break;
+                case UnaryOp.Negate:
+                    ilg.Negate();
+                    break;
+                case UnaryOp.Not:
+                    ilg.Not();
+                    break;
+                default:
+#if NETSTANDARD2_0
+                    MethodInfo m = GetMathMethod(op, exprType);
+#else
+                    MethodInfo? m = GetMathMethod(op, exprType);
+#endif
+                    if (m == null) throw new PascalesqueException("Unknown UnaryOp / type (missed the first time)");
+                    if (tail) ilg.Tail();
+                    ilg.Call(m);
+                    break;
+            }
+            if (tail) ilg.Return();
+        }
+    }
+
+    public sealed class ConvertExpr2 : Expression2
+    {
+        private readonly ConvertTo convertTo;
+        private readonly Expression2 expression;
+
+        public ConvertExpr2(ConvertTo convertTo, Expression2 expression)
+        {
+            this.convertTo = convertTo;
+            this.expression = expression;
+        }
+
+        [Bind("convertTo")]
+        public ConvertTo ConvertTo => convertTo;
+
+        [Bind("expression")]
+        public Expression2 Expression => expression;
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return expression.GetEnvSpec();
+        }
+
+        public static TypeReference GetReturnType(ConvertTo convertTo)
+        {
+            switch (convertTo)
+            {
+                case ConvertTo.Byte: return ExistingTypeReference.Byte;
+                case ConvertTo.Short: return ExistingTypeReference.Int16;
+                case ConvertTo.Int: return ExistingTypeReference.Int32;
+                case ConvertTo.Long: return ExistingTypeReference.Int64;
+                case ConvertTo.IntPtr: return ExistingTypeReference.IntPtr;
+                case ConvertTo.SByte: return ExistingTypeReference.SByte;
+                case ConvertTo.UShort: return ExistingTypeReference.UInt16;
+                case ConvertTo.UInt: return ExistingTypeReference.UInt32;
+                case ConvertTo.ULong: return ExistingTypeReference.UInt64;
+                case ConvertTo.UIntPtr: return ExistingTypeReference.UIntPtr;
+                case ConvertTo.Float: return ExistingTypeReference.Single;
+                case ConvertTo.Double: return ExistingTypeReference.Double;
+                default: throw new PascalesqueException("Unknown ConvertTo type");
+            }
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            return GetReturnType(convertTo);
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return expression.GetCompileSteps(s, owner, envDesc);
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return expression.GetReferences(s, owner, envDesc);
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            TypeReference exprType = expression.GetReturnType(s, envDesc.TypesOnly());
+
+            bool isUnsigned = (exprType == ExistingTypeReference.Byte || exprType == ExistingTypeReference.UInt16 || exprType == ExistingTypeReference.UInt32 || exprType == ExistingTypeReference.UInt64 || exprType == ExistingTypeReference.UIntPtr);
+
+            expression.Compile(s, owner, cc, envDesc, references, false);
+            switch (convertTo)
+            {
+                case ConvertTo.Byte: ilg.Conv_U1(); break;
+                case ConvertTo.Short: ilg.Conv_I2(); break;
+                case ConvertTo.Int: ilg.Conv_I4(); break;
+                case ConvertTo.Long: ilg.Conv_I8(); break;
+                case ConvertTo.IntPtr: ilg.Conv_I(); break;
+                case ConvertTo.SByte: ilg.Conv_I1(); break;
+                case ConvertTo.UShort: ilg.Conv_U2(); break;
+                case ConvertTo.UInt: ilg.Conv_U4(); break;
+                case ConvertTo.ULong: ilg.Conv_U8(); break;
+                case ConvertTo.UIntPtr: ilg.Conv_U(); break;
+                case ConvertTo.Float: if (isUnsigned) { ilg.Conv_R_Un(); } ilg.Conv_R4(); break;
+                case ConvertTo.Double: if (isUnsigned) { ilg.Conv_R_Un(); } ilg.Conv_R8(); break;
+            }
+            if (tail) ilg.Return();
+        }
+    }
+
+    public sealed class RegardAsExpr2 : Expression2
+    {
+        private readonly ConvertTo regardAsWhat;
+        private readonly Expression2 expression;
+
+        public RegardAsExpr2(ConvertTo regardAsWhat, Expression2 expression)
+        {
+            this.regardAsWhat = regardAsWhat;
+            this.expression = expression;
+        }
+
+        [Bind("regardAsWhat")]
+        public ConvertTo RegardAsWhat => regardAsWhat;
+
+        [Bind("expression")]
+        public Expression2 Expression => expression;
+
+        public static ActualStackType GetActualStackType(ConvertTo convertTo)
+        {
+            switch (convertTo)
+            {
+                case ConvertTo.Byte: return ActualStackType.Int32;
+                case ConvertTo.SByte: return ActualStackType.Int32;
+                case ConvertTo.Short: return ActualStackType.Int32;
+                case ConvertTo.UShort: return ActualStackType.Int32;
+                case ConvertTo.Int: return ActualStackType.Int32;
+                case ConvertTo.UInt: return ActualStackType.Int32;
+
+                case ConvertTo.Long: return ActualStackType.Int64;
+                case ConvertTo.ULong: return ActualStackType.Int64;
+
+                case ConvertTo.IntPtr: return ActualStackType.IntPtr;
+                case ConvertTo.UIntPtr: return ActualStackType.IntPtr;
+
+                case ConvertTo.Float: return ActualStackType.Float;
+                case ConvertTo.Double: return ActualStackType.Float;
+
+                default: throw new ArgumentException("Unknown ConvertTo type");
+            }
+        }
+
+        public static ActualStackType GetActualStackType(TypeReference t)
+        {
+            if (t == ExistingTypeReference.Byte || t == ExistingTypeReference.SByte || t == ExistingTypeReference.Int16 || t == ExistingTypeReference.UInt16 || t == ExistingTypeReference.Int32 || t == ExistingTypeReference.UInt32 || t == ExistingTypeReference.Boolean || t == ExistingTypeReference.Char)
+            {
+                return ActualStackType.Int32;
+            }
+            else if (t == ExistingTypeReference.Int64 || t == ExistingTypeReference.UInt64)
+            {
+                return ActualStackType.Int64;
+            }
+            else if (t == ExistingTypeReference.IntPtr || t == ExistingTypeReference.UIntPtr)
+            {
+                return ActualStackType.IntPtr;
+            }
+            else if (t == ExistingTypeReference.Single || t == ExistingTypeReference.Double)
+            {
+                return ActualStackType.Float;
+            }
+            else throw new ArgumentException("Unknown actual stack type");
+        }
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return expression.GetEnvSpec();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference eType = expression.GetReturnType(s, envDesc);
+
+            if (GetActualStackType(eType) != GetActualStackType(regardAsWhat))
+                throw new PascalesqueException("RegardAs doesn't work if types are physically different");
+
+            return ConvertExpr2.GetReturnType(regardAsWhat);
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return expression.GetCompileSteps(s, owner, envDesc);
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return expression.GetReferences(s, owner, envDesc);
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            expression.Compile(s, owner, cc, envDesc, references, tail);
+        }
+    }
+
+    public sealed class ComparisonExpr2 : Expression2
+    {
+        private readonly Comparison comp;
+        private readonly Expression2 expr1;
+        private readonly Expression2 expr2;
+
+        public ComparisonExpr2(Comparison comp, Expression2 expr1, Expression2 expr2)
+        {
+            this.comp = comp;
+            this.expr1 = expr1;
+            this.expr2 = expr2;
+        }
+
+        public override EnvSpec GetEnvSpec()
+        {
+            return expr1.GetEnvSpec() | expr2.GetEnvSpec();
+        }
+
+        public override TypeReference GetReturnType(SymbolTable s, EnvDescTypesOnly2 envDesc)
+        {
+            TypeReference t1 = expr1.GetReturnType(s, envDesc);
+            TypeReference t2 = expr2.GetReturnType(s, envDesc);
+            if (t1 != t2) throw new PascalesqueException("Comparison requires operands of same type");
+
+            return ExistingTypeReference.Boolean;
+        }
+
+        public override ImmutableList<ICompileStep> GetCompileSteps(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return expr1.GetCompileSteps(s, owner, envDesc).AddRange(expr2.GetCompileSteps(s, owner, envDesc));
+        }
+
+        public override ImmutableSortedSet<ItemKey> GetReferences(SymbolTable s, TypeKey owner, EnvDescTypesOnly2 envDesc)
+        {
+            return expr1.GetReferences(s, owner, envDesc).Union(expr2.GetReferences(s, owner, envDesc));
+        }
+
+        public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
+        {
+            ILGenerator ilg = cc.ILGenerator;
+
+            TypeReference t = expr1.GetReturnType(s, envDesc.TypesOnly());
+            bool isUnsigned = (t == ExistingTypeReference.Byte || t == ExistingTypeReference.UInt16 || t == ExistingTypeReference.UInt32 || t == ExistingTypeReference.UInt64);
+
+            expr1.Compile(s, owner, cc, envDesc, references, false);
+
+            if (t == ExistingTypeReference.Byte) ilg.Conv_U1();
+            else if (t == ExistingTypeReference.Int16) ilg.Conv_I2();
+            else if (t == ExistingTypeReference.SByte) ilg.Conv_I1();
+            else if (t == ExistingTypeReference.UInt16) ilg.Conv_U2();
+
+            expr2.Compile(s, owner, cc, envDesc, references, false);
+
+            if (t == ExistingTypeReference.Byte) ilg.Conv_U1();
+            else if (t == ExistingTypeReference.Int16) ilg.Conv_I2();
+            else if (t == ExistingTypeReference.SByte) ilg.Conv_I1();
+            else if (t == ExistingTypeReference.UInt16) ilg.Conv_U2();
+
+            switch (comp)
+            {
+                case Comparison.LessThan:
+                    if (isUnsigned)
+                    {
+                        ilg.CltUn();
+                    }
+                    else
+                    {
+                        ilg.Clt();
+                    }
+                    break;
+                case Comparison.GreaterThan:
+                    if (isUnsigned)
+                    {
+                        ilg.CgtUn();
+                    }
+                    else
+                    {
+                        ilg.Cgt();
+                    }
+                    break;
+                case Comparison.LessEqual:
+                    if (isUnsigned)
+                    {
+                        ilg.CgtUn();
+                    }
+                    else
+                    {
+                        ilg.Cgt();
+                    }
+                    ilg.Not();
+                    break;
+                case Comparison.GreaterEqual:
+                    if (isUnsigned)
+                    {
+                        ilg.CltUn();
+                    }
+                    else
+                    {
+                        ilg.Clt();
+                    }
+                    ilg.Not();
+                    break;
+                case Comparison.Equal:
+                    ilg.Ceq();
+                    break;
+                case Comparison.NotEqual:
+                    ilg.Ceq();
+                    ilg.Not();
+                    break;
+            }
+
+            if (tail) ilg.Return();
+        }
+    }
 }
