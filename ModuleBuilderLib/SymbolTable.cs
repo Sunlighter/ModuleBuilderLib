@@ -90,9 +90,9 @@ namespace Sunlighter.ModuleBuilderLib
 
         public ConstructorInfoProxy
         (
-            [Bind("$dt")] Type declaringType,
-            [Bind("$isPublic")] bool isPublic,
-            [Bind("$parameterTypes")] ImmutableList<Type> parameterTypes
+            [Bind("dt")] Type declaringType,
+            [Bind("isPublic")] bool isPublic,
+            [Bind("parameterTypes")] ImmutableList<Type> parameterTypes
         )
         {
             this.declaringType = declaringType;
@@ -100,13 +100,13 @@ namespace Sunlighter.ModuleBuilderLib
             this.parameterTypes = parameterTypes;
         }
 
-        [Bind("$dt")]
+        [Bind("dt")]
         public Type DeclaringType => declaringType;
 
-        [Bind("$isPublic")]
+        [Bind("isPublic")]
         public bool IsPublic => isPublic;
 
-        [Bind("$parameterTypes")]
+        [Bind("parameterTypes")]
         public ImmutableList<Type> ParameterTypes => parameterTypes;
 
         public static explicit operator ConstructorInfoProxy(ConstructorInfo c)
@@ -121,7 +121,7 @@ namespace Sunlighter.ModuleBuilderLib
 
         public static explicit operator ConstructorInfo(ConstructorInfoProxy c)
         {
-            BindingFlags f = 0;
+            BindingFlags f = BindingFlags.Instance;
             if (c.IsPublic) f |= BindingFlags.Public; else f |= BindingFlags.NonPublic;
 
 #if NETSTANDARD2_0 || NETSTANDARD2_1
@@ -227,8 +227,6 @@ namespace Sunlighter.ModuleBuilderLib
 
         private static CompareWorkerCollection GetCompareWorkerCollection()
         {
-            Builder.Instance.AddTypeTraits<Symbol>(Symbol.TypeTraits);
-
             ITypeTraits<MethodInfoProxy> mip_cw = Builder.Instance.GetTypeTraits<MethodInfoProxy>();
 
             Builder.Instance.AddTypeTraits

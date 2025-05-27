@@ -146,11 +146,11 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
 
         public bool ContainsKey(Symbol s) { return data.ContainsKey(s); }
 
-        public ImmutableHashSet<Symbol> Keys
+        public ImmutableSortedSet<Symbol> Keys
         {
             get
             {
-                return data.Keys.ToImmutableHashSet();
+                return data.Keys.ToImmutableSortedSet();
             }
         }
 

@@ -1226,7 +1226,7 @@ namespace Sunlighter.ModuleBuilderLib
 
         public ILConstructorToBuild
         (
-            MethodAttributes attributes,
+            [Bind("attributes")] MethodAttributes attributes,
             Symbol thisParameterName,
             ImmutableList<ParamInfo> parameters,
             ImmutableList<LocalInfo> locals,
@@ -1398,7 +1398,7 @@ namespace Sunlighter.ModuleBuilderLib
 
         public ILMethodToBuild
         (
-            Symbol name,
+            [Bind("name")] Symbol name,
             MethodAttributes attributes,
             TypeReference returnType,
             Option<Symbol> thisParameterName,

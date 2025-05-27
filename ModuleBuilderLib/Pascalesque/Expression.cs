@@ -57,11 +57,11 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
 
         public bool ContainsKey(Symbol s) { return data.ContainsKey(s); }
 
-        public ImmutableHashSet<Symbol> Keys
+        public ImmutableSortedSet<Symbol> Keys
         {
             get
             {
-                return data.Keys.ToImmutableHashSet();
+                return data.Keys.ToImmutableSortedSet();
             }
         }
 
@@ -381,11 +381,11 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
 
         public bool ContainsKey(Symbol s) { return data.ContainsKey(s); }
 
-        public ImmutableHashSet<Symbol> Keys
+        public ImmutableSortedSet<Symbol> Keys
         {
             get
             {
-                return data.Keys.ToImmutableHashSet();
+                return data.Keys.ToImmutableSortedSet();
             }
         }
 
@@ -647,8 +647,8 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
             this.val = val;
         }
 
-        #warning Need to extend TypeTraitsLib to allow specifying that LiteralArgumentTraits should be used for this value
         [Bind("val")]
+        [UseSpecificTraits(typeof(LiteralArgumentTraits))]
         public object Value => val;
 
         public override EnvSpec GetEnvSpec()
@@ -1216,9 +1216,9 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
     {
         private readonly Expression2 switchOnWhat;
         private readonly Expression2 defaultExpr;
-        private readonly ImmutableList<Tuple<ImmutableHashSet<uint>, Expression2>> targetExprs;
+        private readonly ImmutableList<Tuple<ImmutableSortedSet<uint>, Expression2>> targetExprs;
 
-        public SwitchExpr2(Expression2 switchOnWhat, Expression2 defaultExpr, ImmutableList<Tuple<ImmutableHashSet<uint>, Expression2>> targetExprs)
+        public SwitchExpr2(Expression2 switchOnWhat, Expression2 defaultExpr, ImmutableList<Tuple<ImmutableSortedSet<uint>, Expression2>> targetExprs)
         {
             this.switchOnWhat = switchOnWhat;
             this.defaultExpr = defaultExpr;
@@ -1232,12 +1232,12 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
         public Expression2 DefaultExpression => defaultExpr;
 
         [Bind("targetExprs")]
-        public ImmutableList<Tuple<ImmutableHashSet<uint>, Expression2>> TargetExpressions => targetExprs;
+        public ImmutableList<Tuple<ImmutableSortedSet<uint>, Expression2>> TargetExpressions => targetExprs;
 
         public override EnvSpec GetEnvSpec()
         {
             EnvSpec e = switchOnWhat.GetEnvSpec() | defaultExpr.GetEnvSpec();
-            foreach (Tuple<ImmutableHashSet<uint>, Expression2> kvp in targetExprs)
+            foreach (Tuple<ImmutableSortedSet<uint>, Expression2> kvp in targetExprs)
             {
                 e |= kvp.Item2.GetEnvSpec();
             }
@@ -1254,7 +1254,7 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
             bool[] b1 = new bool[max + 1];
 
             TypeReference t = defaultExpr.GetReturnType(s, envDesc);
-            foreach (Tuple<ImmutableHashSet<uint>, Expression2> kvp in targetExprs)
+            foreach (Tuple<ImmutableSortedSet<uint>, Expression2> kvp in targetExprs)
             {
                 foreach (uint u in kvp.Item1)
                 {
@@ -1285,7 +1285,7 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
         public override void Compile(SymbolTable s, TypeKey owner, CompileContext2 cc, EnvDesc2 envDesc, ImmutableSortedDictionary<ItemKey, SaBox<object>> references, bool tail)
         {
             List<Label> labelList = new List<Label>();
-            foreach (Tuple<ImmutableHashSet<uint>, Expression2> item in targetExprs)
+            foreach (Tuple<ImmutableSortedSet<uint>, Expression2> item in targetExprs)
             {
                 Label l0 = cc.ILGenerator.DefineLabel();
                 labelList.Add(l0);
@@ -1301,7 +1301,7 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
             int iEnd = targetExprs.Count;
             for (int i = 0; i < iEnd; ++i)
             {
-                Tuple<ImmutableHashSet<uint>, Expression2> item = targetExprs[i];
+                Tuple<ImmutableSortedSet<uint>, Expression2> item = targetExprs[i];
                 foreach (uint u in item.Item1)
                 {
                     if (assigned[u]) throw new PascalesqueException("A value can go to only one expression");
@@ -3405,6 +3405,7 @@ namespace Sunlighter.ModuleBuilderLib.Pascalesque
         }
     }
 
+    [Record]
     public sealed class NewObjExpr2 : Expression2
     {
         private readonly ConstructorReference constructorToCall;

@@ -1,10 +1,13 @@
 ﻿using Sunlighter.TypeTraitsLib;
+using Sunlighter.TypeTraitsLib.Building;
 using System;
 using System.Collections.Immutable;
 using System.Threading;
 
 namespace Sunlighter.ModuleBuilderLib
 {
+    [ProvidesOwnTypeTraits]
+    [ProvidesOwnAdapter]
     public abstract class Symbol : IEquatable<Symbol>, IComparable<Symbol>
     {
         private static readonly Lazy<ITypeTraits<Symbol>> typeTraits = new Lazy<ITypeTraits<Symbol>>(GetTypeTraits, LazyThreadSafetyMode.ExecutionAndPublication);
