@@ -43,7 +43,7 @@ namespace Sunlighter.ModuleBuilderLib
 
         public static ITypeTraits<Symbol> TypeTraits => typeTraits.Value;
 
-        private static Lazy<Adapter<Symbol>> adapter = new Lazy<Adapter<Symbol>>
+        private static readonly Lazy<Adapter<Symbol>> adapter = new Lazy<Adapter<Symbol>>
         (
             () => Adapter<Symbol>.Create(typeTraits.Value),
             LazyThreadSafetyMode.ExecutionAndPublication
