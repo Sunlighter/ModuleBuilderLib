@@ -22,11 +22,11 @@ namespace Sunlighter.ModuleBuilderLib
 
         public MethodInfoProxy
         (
-            [Bind("$dt")] Type declaringType,
-            [Bind("$name")] string name,
-            [Bind("$isPublic")] bool isPublic,
-            [Bind("$isStatic")] bool isStatic,
-            [Bind("$parameterTypes")] ImmutableList<Type> parameterTypes
+            Type declaringType,
+            string name,
+            bool isPublic,
+            bool isStatic,
+            ImmutableList<Type> parameterTypes
         )
         {
             this.declaringType = declaringType;
@@ -36,19 +36,19 @@ namespace Sunlighter.ModuleBuilderLib
             this.parameterTypes = parameterTypes;
         }
 
-        [Bind("$dt")]
+        [Bind("declaringType")]
         public Type DeclaringType => declaringType;
 
-        [Bind("$name")]
+        [Bind("name")]
         public string Name => name;
 
-        [Bind("$isPublic")]
+        [Bind("isPublic")]
         public bool IsPublic => isPublic;
 
-        [Bind("$isStatic")]
+        [Bind("isStatic")]
         public bool IsStatic => isStatic;
 
-        [Bind("$parameterTypes")]
+        [Bind("parameterTypes")]
         public ImmutableList<Type> ParameterTypes => parameterTypes;
 
         public static explicit operator MethodInfoProxy(MethodInfo m)
@@ -90,9 +90,9 @@ namespace Sunlighter.ModuleBuilderLib
 
         public ConstructorInfoProxy
         (
-            [Bind("dt")] Type declaringType,
-            [Bind("isPublic")] bool isPublic,
-            [Bind("parameterTypes")] ImmutableList<Type> parameterTypes
+            Type declaringType,
+            bool isPublic,
+            ImmutableList<Type> parameterTypes
         )
         {
             this.declaringType = declaringType;
@@ -100,7 +100,7 @@ namespace Sunlighter.ModuleBuilderLib
             this.parameterTypes = parameterTypes;
         }
 
-        [Bind("dt")]
+        [Bind("declaringType")]
         public Type DeclaringType => declaringType;
 
         [Bind("isPublic")]
@@ -144,9 +144,9 @@ namespace Sunlighter.ModuleBuilderLib
 
         public FieldInfoProxy
         (
-            [Bind("$dt")] Type declaringType,
-            [Bind("$name")] string name,
-            [Bind("$isPublic")] bool isPublic
+            Type declaringType,
+            string name,
+            bool isPublic
         )
         {
             this.declaringType = declaringType;
@@ -154,13 +154,13 @@ namespace Sunlighter.ModuleBuilderLib
             this.isPublic = isPublic;
         }
 
-        [Bind("$dt")]
+        [Bind("declaringType")]
         public Type DeclaringType => declaringType;
 
-        [Bind("$name")]
+        [Bind("name")]
         public string Name => name;
 
-        [Bind("$isPublic")]
+        [Bind("isPublic")]
         public bool IsPublic => isPublic;
 
         public static explicit operator FieldInfoProxy(FieldInfo f)
@@ -282,27 +282,6 @@ namespace Sunlighter.ModuleBuilderLib
         public static ITypeTraits<ConstructorReference> ConstructorReferenceCompareWorker => compareWorkerCollection.Value.ConstructorReferenceCompareWorker;
 
         public static ITypeTraits<FieldReference> FieldReferenceCompareWorker => compareWorkerCollection.Value.FieldReferenceCompareWorker;
-    }
-
-    [Obsolete]
-    enum ItemHashDelimiters : byte
-    {
-        TypeKey = (byte)0x3A,
-        CompletedTypeKey = (byte)0x91,
-        TypeKeyReference = (byte)0x3F,
-        ExistingTypeReference = (byte)0x34,
-        ExistingGenericTypeReference = (byte)0x37,
-        MethodKey = (byte)0x36,
-        ConstructorKey = (byte)0x31,
-        FieldKey = (byte)0x3B,
-        ArrayTypeReference = (byte)0x3D,
-        MethodKeyReference = (byte)0x56,
-        ExistingMethodReference = (byte)0x51,
-        ExistingConstructorReference = (byte)0x52,
-        ConstructorKeyReference = (byte)0x53,
-        FieldKeyReference = (byte)0x54,
-        ExistingFieldReference = (byte)0x55,
-        PropertyKey = (byte)0x39,
     }
 
     [UnionOfDescendants]
