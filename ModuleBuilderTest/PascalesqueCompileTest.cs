@@ -1,6 +1,7 @@
 ﻿using Sunlighter.ModuleBuilderLib;
 using Sunlighter.ModuleBuilderLib.Pascalesque;
 using Sunlighter.TypeTraitsLib;
+using Sunlighter.TypeTraitsLib.Building;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -245,6 +246,22 @@ namespace ModuleBuilderTest
             MethodInfo runMethod = programClass.GetMethod("Run", Type.EmptyTypes).AssertNotNull();
             Assert.IsNotNull(runMethod, "Run method not found");
             runMethod.Invoke(null, null);
+        }
+
+        [TestMethod]
+        public void TestSerialization()
+        {
+            Assert.IsNotNull(Tools.MethodReferenceCompareWorker, "MethodReferenceCompareWorker is null");
+
+            ModuleToBuild moduleToBuild = GetTestModule();
+            ITypeTraits<ModuleToBuild> typeTraits = Builder.Instance.GetTypeTraits<ModuleToBuild>();
+
+            byte[] serialized = typeTraits.SerializeToBytes(moduleToBuild);
+            ModuleToBuild deserialized = typeTraits.DeserializeFromBytes(serialized);
+
+            // comparison for equality might not work because gensyms won't compare equal...
+
+            Assert.IsNotNull(deserialized, "Deserialized module is null");
         }
     }
 }
